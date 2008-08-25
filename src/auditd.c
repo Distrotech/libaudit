@@ -40,9 +40,10 @@
 #include <getopt.h>
 
 #include "libaudit.h"
-#include "auditd-config.h"
 #include "auditd-event.h"
+#include "auditd-config.h"
 #include "auditd-dispatch.h"
+#include "auditd-listen.h"
 #include "private.h"
 
 #include "ev.h"
@@ -67,6 +68,7 @@ static struct auditd_reply_list *rep = NULL;
 static int hup_info_requested = 0, usr1_info_requested = 0;
 
 /* Local function prototypes */
+int send_audit_event(int type, const char *str);
 static void close_down(void);
 static void clean_exit(void);
 static int get_reply(int fd, struct audit_reply *rep, int seq);
@@ -167,8 +169,12 @@ static void distribute_event(struct auditd_reply_list *rep)
 				rep->reply.type >= AUDIT_FIRST_DAEMON ? 1 : 0;
 		/* Write to local disk */
 		enqueue_event(rep);
-		if (yield)
-			pthread_yield(); /* Let other thread try to log it. */
+		if (yield) {
+			struct timespec ts;
+			ts.tv_sec = 0;
+			ts.tv_nsec = 2 * 1000 * 1000; // 2 milliseconds
+			nanosleep(&ts, NULL); /* Let other thread try to log it. */
+		}
 	} else
 		free(rep);	// This function takes custody of the memory
 
@@ -670,7 +676,15 @@ int main(int argc, char *argv[])
 	ev_signal_init (&sigchld_watcher, child_handler, SIGCHLD);
 	ev_signal_start (loop, &sigchld_watcher);
 
-	ev_loop (loop, 0);
+	if (auditd_tcp_listen_init (loop, &config)) {
+		tell_parent (FAILURE);
+		stop = 1;
+	}
+
+	if (!stop)
+		ev_loop (loop, 0);
+
+	auditd_tcp_listen_uninit (loop);
 
 	/* Write message to log that we are going down */
 
