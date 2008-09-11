@@ -6,7 +6,7 @@
 
 Summary: User space tools for 2.6 kernel auditing
 Name: audit
-Version: 1.7.5
+Version: 1.7.6
 Release: 1
 License: GPLv2+
 Group: System Environment/Daemons
@@ -14,6 +14,7 @@ URL: http://people.redhat.com/sgrubb/audit/
 Source0: http://people.redhat.com/sgrubb/audit/%{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildRequires: gettext-devel intltool libtool swig python-devel
+BuildRequires: tcp_wrappers-devel krb5-devel
 BuildRequires: kernel-headers >= 2.6.18
 BuildRequires: automake >= 1.9
 BuildRequires: autoconf >= 2.59
@@ -100,8 +101,7 @@ cp -p audisp/plugins/zos-remote/policy/audispd-zos-remote.* zos-remote-policy
 
 %build
 (cd system-config-audit; ./autogen.sh)
-aclocal && autoconf && autoheader && automake
-%configure --sbindir=/sbin --libdir=/%{_lib} --with-prelude
+%configure --sbindir=/sbin --libdir=/%{_lib} --with-prelude --with-libwrap --enable-gssapi-krb5
 make %{?_smp_mflags}
 cd zos-remote-policy
 for selinuxvariant in %{selinux_variants}
@@ -153,6 +153,8 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_audit.a
 rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_audit.la
 rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_auparse.a
 rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_auparse.la
+rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/auparse.a
+rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/auparse.la
 
 # On platforms with 32 & 64 bit libs, we need to coordinate the timestamp
 touch -r ./audit.spec $RPM_BUILD_ROOT/etc/libaudit.conf
@@ -164,10 +166,8 @@ desktop-file-install					\
 	--delete-original				\
 	system-config-audit/system-config-audit.desktop
 
-# This is a reminder to enable it when tests
-# aren't based on postfix uids
-#% check
-#make check
+%check
+make check
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -244,13 +244,12 @@ fi
 %{_includedir}/auparse.h
 %{_includedir}/auparse-defs.h
 %{_mandir}/man3/*
-%{_mandir}/man5/ausearch-expression.5.gz
 
 %files libs-python
 %defattr(-,root,root)
 %attr(755,root,root) %{_libdir}/python?.?/site-packages/_audit.so
 %attr(755,root,root) %{_libdir}/python?.?/site-packages/auparse.so
-%{_libdir}/python?.?/site-packages/auparse-*.egg-info
+#%{_libdir}/python?.?/site-packages/auparse-*.egg-info
 %{python_sitelib}/audit.py*
 
 %files
@@ -266,6 +265,7 @@ fi
 %attr(644,root,root) %{_mandir}/man8/ausyscall.8.gz
 %attr(644,root,root) %{_mandir}/man5/auditd.conf.5.gz
 %attr(644,root,root) %{_mandir}/man5/audispd.conf.5.gz
+%attr(644,root,root) %{_mandir}/man5/ausearch-expression.5.gz
 %attr(750,root,root) /sbin/auditctl
 %attr(750,root,root) /sbin/auditd
 %attr(755,root,root) /sbin/ausearch
@@ -322,7 +322,24 @@ fi
 %config(noreplace) %{_sysconfdir}/security/console.apps/system-config-audit-server
 
 %changelog
-* Mon May 19 2008 Steve Grubb <sgrubb@redhat.com> 1.7.5-1
+* Wed Sep 11 2008 Steve Grubb <sgrubb@redhat.com> 1.7.6-1
+- Update event record list and aureport classifications (Yu Zhiguo/Peng Haitao)
+- Add subject to audit daemon events (Chu Li)
+- Fix parsing of acct & exe fields in user records (Peng Haitao)
+- Make client error handling in audisp-remote robust (DJ Delorie)
+- Add tcp_wrappers support for auditd
+- Updated syscall tables for 2.6.27 kernel
+- Add heartbeat exchange to remote logging protocol (DJ Delorie)
+- Audit connect/disconnect of remote clients
+- In ausearch, collect pid from AVC records (Peng Haitao)
+- Add auparse_get_field_type function to describe field's contents
+- Add GSS/Kerberos encryption to the remote protocol (DJ Delorie)
+
+* Mon Aug 25 2008 Steve Grubb <sgrubb@redhat.com> 1.7.5-1
+- Update system-config-audit to 0.4.8
+- Whole lot of bug fixes - see ChangeLog for details
+- Reimplement auditd main loop using libev
+- Add TCP listener to auditd to receive remote events
 
 * Mon May 19 2008 Steve Grubb <sgrubb@redhat.com> 1.7.4-1
 - Fix interpreting of keys in syscall records

@@ -101,6 +101,12 @@ int nvlist_find_name(nvlist *l, const char *name)
 	return 0;
 }
 
+int nvlist_get_cur_type(const rnode *r)
+{
+	const nvlist *l = &r->nv;
+	return lookup_type(l->cur->name);
+}
+
 const char *nvlist_interp_cur_val(const rnode *r)
 {
 	const nvlist *l = &r->nv;

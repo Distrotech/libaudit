@@ -40,9 +40,10 @@
 #include <getopt.h>
 
 #include "libaudit.h"
-#include "auditd-config.h"
 #include "auditd-event.h"
+#include "auditd-config.h"
 #include "auditd-dispatch.h"
+#include "auditd-listen.h"
 #include "private.h"
 
 #include "ev.h"
@@ -53,6 +54,7 @@
 #define DMSG_SIZE (DEFAULT_BUF_SZ + 48) 
 #define SUCCESS 0
 #define FAILURE 1
+#define SUBJ_LEN 4097
 
 /* Global Data */
 volatile int stop = 0;
@@ -65,11 +67,15 @@ static int init_pipe[2];
 static int do_fork = 1;
 static struct auditd_reply_list *rep = NULL;
 static int hup_info_requested = 0, usr1_info_requested = 0;
+static char subj[SUBJ_LEN];
+static struct ev_periodic periodic_watcher;
 
 /* Local function prototypes */
+int send_audit_event(int type, const char *str);
 static void close_down(void);
 static void clean_exit(void);
 static int get_reply(int fd, struct audit_reply *rep, int seq);
+static char *getsubj(char *subj);
 
 enum startup_state {startup_disable=0, startup_enable, startup_nochange, startup_INVALID};
 static const char *startup_states[] = {"disable", "enable", "nochange"};
@@ -167,8 +173,12 @@ static void distribute_event(struct auditd_reply_list *rep)
 				rep->reply.type >= AUDIT_FIRST_DAEMON ? 1 : 0;
 		/* Write to local disk */
 		enqueue_event(rep);
-		if (yield)
-			pthread_yield(); /* Let other thread try to log it. */
+		if (yield) {
+			struct timespec ts;
+			ts.tv_sec = 0;
+			ts.tv_nsec = 2 * 1000 * 1000; // 2 milliseconds
+			nanosleep(&ts, NULL); /* Let other thread try to log it. */
+		}
 	} else
 		free(rep);	// This function takes custody of the memory
 
@@ -347,11 +357,15 @@ static void netlink_handler( struct ev_loop *loop, struct ev_io *io, int revents
 	if (rep == NULL) { 
 		if ((rep = malloc(sizeof(*rep))) == NULL) {
 			char emsg[DEFAULT_BUF_SZ];
-			snprintf(emsg, sizeof(emsg), 
-				 "auditd error halt, auid=%u pid=%d res=failed",
-				 audit_getloginuid(), getpid());
+			if (*subj)
+				snprintf(emsg, sizeof(emsg),
+					"auditd error halt, auid=%u pid=%d subj=%s res=failed",
+					audit_getloginuid(), getpid(), subj);
+			else
+				snprintf(emsg, sizeof(emsg),
+					 "auditd error halt, auid=%u pid=%d res=failed",
+					 audit_getloginuid(), getpid());
 			EV_STOP ();
-			//FIXME add subj
 			send_audit_event(AUDIT_DAEMON_ABORT, emsg);
 			audit_msg(LOG_ERR, 
 				  "Cannot allocate audit reply, exiting");
@@ -414,6 +428,24 @@ static void netlink_handler( struct ev_loop *loop, struct ev_io *io, int revents
 		if (errno == EFBIG) {
 			// FIXME do err action
 		}
+	}
+}
+
+static void periodic_handler( struct ev_loop *loop, struct ev_periodic *per, int revents )
+{
+	if (config.tcp_client_max_idle)
+		auditd_tcp_listen_check_idle (loop);
+}
+
+void periodic_reconfigure ()
+{
+	struct ev_loop *loop = ev_default_loop (EVFLAG_AUTO);
+	if (config.tcp_client_max_idle) {
+		ev_periodic_set (&periodic_watcher, ev_now (loop),
+				 config.tcp_client_max_idle, NULL);
+		ev_periodic_start (loop, &periodic_watcher);
+	} else {
+		ev_periodic_stop (loop, &periodic_watcher);
 	}
 }
 
@@ -579,12 +611,18 @@ int main(int argc, char *argv[])
 			tell_parent(FAILURE);
 			return 1;
 		}
-//FIXME add SUBJ
-		snprintf(start, sizeof(start), 
-		    "auditd start, ver=%s format=%s "
-		    "kernel=%.56s auid=%u pid=%d res=success",
-		     VERSION, fmt, ubuf.release,
-		     audit_getloginuid(), getpid());
+		if(getsubj(subj))
+			snprintf(start, sizeof(start),
+				"auditd start, ver=%s format=%s "
+				"kernel=%.56s auid=%u pid=%d subj=%s res=success",
+				VERSION, fmt, ubuf.release,
+				audit_getloginuid(), getpid(), subj);
+		else
+			snprintf(start, sizeof(start),
+				"auditd start, ver=%s format=%s "
+				"kernel=%.56s auid=%u pid=%d res=success",
+				VERSION, fmt, ubuf.release,
+				audit_getloginuid(), getpid());
 		if (send_audit_event(AUDIT_DAEMON_START, start)) {
         		audit_msg(LOG_ERR, "Cannot send start message");
 			if (pidfile)
@@ -604,11 +642,15 @@ int main(int argc, char *argv[])
 	/* Tell the kernel we are alive */
 	if (audit_set_pid(fd, getpid(), WAIT_YES) < 0) {
 		char emsg[DEFAULT_BUF_SZ];
-		snprintf(emsg, sizeof(emsg),
-			"auditd error halt, auid=%u pid=%d res=failed",
-			audit_getloginuid(), getpid());
+		if (*subj)
+			snprintf(emsg, sizeof(emsg),
+				"auditd error halt, auid=%u pid=%d subj=%s res=failed",
+				audit_getloginuid(), getpid(), subj);
+		else
+			snprintf(emsg, sizeof(emsg),
+				"auditd error halt, auid=%u pid=%d res=failed",
+				audit_getloginuid(), getpid());
 		stop = 1;
-//FIXME add subj
 		send_audit_event(AUDIT_DAEMON_ABORT, emsg);
 		audit_msg(LOG_ERR, "Unable to set audit pid, exiting");
 		close_down();
@@ -626,11 +668,15 @@ int main(int argc, char *argv[])
 	if (opt_startup != startup_nochange &&
 	    audit_set_enabled(fd, (int)opt_startup) < 0) {
 		char emsg[DEFAULT_BUF_SZ];
-		snprintf(emsg, sizeof(emsg),
-			"auditd error halt, auid=%u pid=%d res=failed",
-			audit_getloginuid(), getpid());
+		if (*subj)
+			snprintf(emsg, sizeof(emsg),
+				"auditd error halt, auid=%u pid=%d subj=%s res=failed",
+				audit_getloginuid(), getpid(), subj);
+		else
+			snprintf(emsg, sizeof(emsg),
+				"auditd error halt, auid=%u pid=%d res=failed",
+				audit_getloginuid(), getpid());
 		stop = 1;
-//FIXME add subj
 		send_audit_event(AUDIT_DAEMON_ABORT, emsg);
 		audit_msg(LOG_ERR,
 			"Unable to set intitial audit startup state to '%s', exiting",
@@ -670,7 +716,20 @@ int main(int argc, char *argv[])
 	ev_signal_init (&sigchld_watcher, child_handler, SIGCHLD);
 	ev_signal_start (loop, &sigchld_watcher);
 
-	ev_loop (loop, 0);
+	ev_periodic_init (&periodic_watcher, periodic_handler,
+			  0, config.tcp_client_max_idle, NULL);
+	if (config.tcp_client_max_idle)
+		ev_periodic_start (loop, &periodic_watcher);
+
+	if (auditd_tcp_listen_init (loop, &config)) {
+		tell_parent (FAILURE);
+		stop = 1;
+	}
+
+	if (!stop)
+		ev_loop (loop, 0);
+
+	auditd_tcp_listen_uninit (loop);
 
 	/* Write message to log that we are going down */
 
@@ -770,5 +829,31 @@ static int get_reply(int fd, struct audit_reply *rep, int seq)
 		}
 	}
 	return -1;
+}
+
+//get the subj of the daemon
+static char *getsubj(char *subj)
+{
+	pid_t pid = getpid();
+	char filename[48];
+	ssize_t num_read;
+	int fd;
+
+	snprintf(filename, sizeof(filename), "/proc/%u/attr/current", pid);
+	fd = open(filename, O_RDONLY);
+	if(fd == -1) {
+		subj[0] = 0;
+		return NULL;
+	}
+	do {
+		num_read = read(fd, subj, SUBJ_LEN-1);
+	} while (num_read < 0 && errno == EINTR);
+	close(fd);
+	if(num_read <= 0) {
+		subj[0] = 0;
+		return NULL;
+	}
+	subj[num_read] = '\0';
+	return subj;
 }
 

@@ -211,7 +211,7 @@ int extract_search_items(llist *l)
 			   AUDIT_FIRST_KERN_ANOM_MSG...AUDIT_LAST_KERN_ANOM_MSG:
 				ret = parse_kernel_anom(n, s);
 				break;
-			case AUDIT_MAC_POLICY_LOAD...AUDIT_MAC_IPSEC_DELSPD:
+			case AUDIT_MAC_POLICY_LOAD...AUDIT_MAC_UNLBL_STCDEL:
 				ret = parse_simple_message(n, s);
 				break;
 			case AUDIT_KERNEL:
@@ -791,14 +791,12 @@ static int parse_user(const lnode *n, search_items *s)
 				*term = saved;
 			} else { 
 				/* Handle legacy accts */
-				char *end = term;
+				char *end = ptr;
 				int legacy = 0;
 
 				while (*end != ' ') {
-					if (!isxdigit(*end)) {
+					if (!isxdigit(*end))
 						legacy = 1;
-						break;
-					}
 					end++;
 				}
 				term = end;
@@ -872,8 +870,26 @@ static int parse_user(const lnode *n, search_items *s)
 				*term = 0;
 				s->exe = strdup(str);
 				*term = '"';
-			} else 
-				s->exe = unescape(str);
+			} else {
+				char *end = str;
+				int legacy = 0;
+
+				while (*end != ' ') {
+					if (!isxdigit(*end)) {
+						legacy = 1;
+					}
+					end++;
+				}
+				term = end;
+				if (!legacy)
+					s->exe = unescape(str);
+				else {
+					saved = *term;
+					*term = 0;
+					s->exe = strdup(str);
+					*term = saved;
+				}
+			}
 		}
 	}
 	
@@ -1193,11 +1209,26 @@ static int parse_avc(const lnode *n, search_items *s)
 		*term = ' ';
 	}
 
+	// get pid
+	str = strstr(term, "pid=");
+	if (str) {
+		str = str + 4;
+		term = strchr(str, ' ');
+		if (term == NULL)
+			return 3;
+		*term = 0;
+		errno = 0;
+		s->pid = strtoul(str, NULL, 10);
+		if (errno)
+			return 4;
+		*term = ' ';
+	}
+
 	if (event_comm && s->comm == NULL) {
 	// dont do this search unless needed
 		str = strstr(term, "comm=");
 		if (str == NULL) {
-			rc = 3;
+			rc = 5;
 			goto err;
 		}
 		str += 5;
@@ -1205,7 +1236,7 @@ static int parse_avc(const lnode *n, search_items *s)
 			str++;
 			term = strchr(str, '"');
 			if (term == NULL) {
-				rc = 4;
+				rc = 6;
 				goto err;
 			}
 			*term = 0;
@@ -1234,7 +1265,7 @@ static int parse_avc(const lnode *n, search_items *s)
 			str += 9;
 			term = strchr(str, ' ');
 			if (term == NULL) {
-				rc = 5;
+				rc = 7;
 				goto err;
 			}
 			*term = 0;
@@ -1250,7 +1281,7 @@ static int parse_avc(const lnode *n, search_items *s)
 			str += 9;
 			term = strchr(str, ' ');
 			if (term == NULL) {
-				rc = 6;
+				rc = 8;
 				goto err;
 			}
 			*term = 0;
@@ -1262,7 +1293,7 @@ static int parse_avc(const lnode *n, search_items *s)
 	// Now get the class...its at the end, so we do things different
 	str = strstr(term, "tclass=");
 	if (str == NULL) {
-		rc = 7;
+		rc = 9;
 		goto err;
 	}
 	str += 7;
@@ -1276,7 +1307,7 @@ static int parse_avc(const lnode *n, search_items *s)
 	if (audit_avc_init(s) == 0) {
 		alist_append(s->avc, &an);
 	} else {
-		rc = 8;
+		rc = 10;
 		goto err;
 	}
 
@@ -1398,24 +1429,26 @@ static int parse_kernel_anom(const lnode *n, search_items *s)
 // of interest.
 static int parse_simple_message(const lnode *n, search_items *s)
 {
-	char *str, *ptr, *term;
+	char *str, *ptr, *term  = n->message;
 
-	// get loginuid
-	str = strstr(n->message, "auid=");
-	if (str == NULL)
+	// get loginuid - note some kernels don't have auid for CONFIG_CHANGE
+	str = strstr(term, "auid=");
+	if (str == NULL && n->type != AUDIT_CONFIG_CHANGE)
 		return 1;
-	ptr = str + 5;
-	term = strchr(ptr, ' ');
-	if (term)
-		*term = 0;
-	errno = 0;
-	s->loginuid = strtoul(ptr, NULL, 10);
-	if (errno)
-		return 2;
-	if (term)
-		*term = ' ';
-	else
-		term = ptr;
+	if (str) {
+		ptr = str + 5;
+		term = strchr(ptr, ' ');
+		if (term)
+			*term = 0;
+		errno = 0;
+		s->loginuid = strtoul(ptr, NULL, 10);
+		if (errno)
+			return 2;
+		if (term)
+			*term = ' ';
+		else
+			term = ptr;
+	}
 
 	// Now get subj label
 	if (event_subject) {

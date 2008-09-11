@@ -70,6 +70,14 @@ struct daemon_conf
 	const char *disk_full_exe;
 	failure_action_t disk_error_action;
 	const char *disk_error_exe;
+	unsigned long tcp_listen_port;
+	unsigned long tcp_listen_queue;
+	unsigned long tcp_client_min_port;
+	unsigned long tcp_client_max_port;
+	unsigned long tcp_client_max_idle;
+#ifdef USE_GSSAPI
+	const char *gss_principal;
+#endif
 };
 
 void set_allow_links(int allow);
@@ -80,10 +88,13 @@ int validate_email(const char *acct);
 int resolve_node(struct daemon_conf *config);
 
 void init_config_manager(void);
+#ifdef AUDITD_EVENT_H
 int start_config_manager(struct auditd_reply_list *rep);
+#endif
 void shutdown_config(void);
 void free_config(struct daemon_conf *config);
 
+void periodic_reconfigure(void);
 
 #endif
 
