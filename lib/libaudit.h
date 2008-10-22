@@ -87,9 +87,11 @@ extern "C" {
 
 #define AUDIT_FIRST_DAEMON	1200
 #define AUDIT_LAST_DAEMON	1299
-#define AUDIT_DAEMON_RECONFIG	1204	/* Audit daemon should reconfigure */
-#define AUDIT_DAEMON_ROTATE	1205	/* Audit daemon should rotate logs */
-#define AUDIT_DAEMON_RESUME	1206	/* Audit daemon should resume logging */
+#define AUDIT_DAEMON_RECONFIG	1204	/* Auditd should reconfigure */
+#define AUDIT_DAEMON_ROTATE	1205	/* Auditd should rotate logs */
+#define AUDIT_DAEMON_RESUME	1206	/* Auditd should resume logging */
+#define AUDIT_DAEMON_ACCEPT	1207    /* Auditd accepted remote connection */
+#define AUDIT_DAEMON_CLOSE	1208    /* Auditd closed remote connection */
 
 #define AUDIT_FIRST_EVENT	1300
 #define AUDIT_LAST_EVENT	1399
@@ -115,7 +117,6 @@ extern "C" {
 #ifndef AUDIT_EOE
 #define AUDIT_EOE		1320	/* End of event */
 #endif
-#define AUDIT_LAST_EVENT	1399
 
 #define AUDIT_FIRST_SELINUX	1400
 #define AUDIT_LAST_SELINUX	1499
@@ -232,6 +233,15 @@ extern "C" {
 #define AUDIT_TTY_GET		1016	/* Get TTY auditing status */
 #define AUDIT_TTY_SET		1017	/* Set TTY audit status */
 #endif
+
+#ifndef AUDIT_MAC_IPSEC_EVENT
+#define AUDIT_MAC_IPSEC_EVENT   1415    /* Audit an IPSec event */
+#endif
+#ifndef AUDIT_MAC_UNLBL_STCADD
+#define AUDIT_MAC_UNLBL_STCADD  1416    /* NetLabel: add a static label */
+#define AUDIT_MAC_UNLBL_STCDEL  1417    /* NetLabel: del a static label */
+#endif
+
 
 /* This is for the new operator patch */
 #ifndef AUDIT_BIT_MASK
@@ -413,10 +423,6 @@ struct audit_reply {
 	};
 };
 
-struct auditd_reply_list {
-	struct audit_reply reply;
-	struct auditd_reply_list *next;
-};
 //
 // End of ABI control
 //////////////////////////////////////////////////////
@@ -476,6 +482,7 @@ extern int        audit_name_to_errno(const char *error);
 extern const char *audit_errno_to_name(int error);
 extern int        audit_name_to_ftype(const char *name);
 extern const char *audit_ftype_to_name(int ftype); 
+extern void audit_number_to_errmsg(int errnumber, const char *opt);
 
 /* AUDIT_GET */
 extern int audit_request_status(int fd);
@@ -515,6 +522,10 @@ extern int  audit_delete_rule_data(int fd, struct audit_rule_data *rule,
                                    int flags, int action);
 
 /* The following are for standard formatting of messages */
+extern int audit_value_needs_encoding(const char *str, unsigned int len);
+extern char *audit_encode_value(char *final,const char *buf,unsigned int size);
+extern char *audit_encode_nv_string(const char *name, const char *value,
+	unsigned int vlen);
 extern int audit_log_user_message(int audit_fd, int type, const char *message,
         const char *hostname, const char *addr, const char *tty, int result);
 extern int audit_log_user_comm_message(int audit_fd, int type,

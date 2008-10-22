@@ -1,3 +1,27 @@
+1.7.7
+- Bug fixes for gss code in remote logging (DJ Delorie)
+- Fix ausearch -i to keep the node field in the output
+- ausyscall now does strstr match on syscall names
+- Makefile cleanup (Philipp Hahn)
+- Add watched syscall support to audisp-prelude
+- Use the right define for tcp_wrappers in auditd
+- Expose encoding API for fields being logged from user space
+
+1.7.6
+- Update event record list and aureport classifications (Yu Zhiguo/Peng Haitao)
+- Add subject to audit daemon events (Chu Li)
+- Fix parsing of acct & exe fields in user records (Peng Haitao)
+- Make client error handling in audisp-remote robust (DJ Delorie)
+- Do not list syscalls for rules on the exclude filter (Yu Zhiguo)
+- Add tcp_wrappers support for auditd
+- Updated syscall tables for 2.6.27 kernel
+- Add heartbeat exchange to remote logging protocol (DJ Delorie)
+- Apply man page update (Philipp Hahn)
+- Audit connect/disconnect of remote clients
+- In ausearch, collect pid from AVC records (Peng Haitao)
+- Add auparse_get_field_type function to describe field's contents
+- Add GSS/Kerberos encryption to the remote protocol (DJ Delorie)
+
 1.7.5
 - Update system-config-audit to 0.4.8 (Miloslav Trmac)
 - Don't free const fcntl strings in auparse (Miloslav Trmac)
@@ -24,6 +48,10 @@
 - Reimplement auditd main loop using libev (DJ Delorie)
 - Update unknown uid/gid messages in audit rule parsing (Cai Xianchao)
 - Don't allow negative uid/gid in audtictl rules (Cai Xianchao)
+- Add TCP listener and managed remote protocol features (DJ Delorie)
+- Allow config_change audit records with no auid to parse in ausearch/report
+- Attempt to solve scheduler issue where queues overflow
+- Strip the newline off events converted to string in audispd
 
 1.7.4
 - Fix interpreting of keys in syscall records

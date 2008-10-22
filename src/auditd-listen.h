@@ -1,5 +1,5 @@
-/* auditd-event.h -- 
- * Copyright 2004, 2005, 2008 Red Hat Inc., Durham, North Carolina.
+/* auditd-config.h -- 
+ * Copyright 2004-2007 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -17,33 +17,17 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  * Authors:
- *   Steve Grubb <sgrubb@redhat.com>
+ *   DJ Delorie <dj@redhat.com>
  * 
  */
 
-#ifndef AUDITD_EVENT_H
-#define AUDITD_EVENT_H
+#ifndef AUDITD_LISTEN_H
+#define AUDITD_LISTEN_H
 
-#include "libaudit.h"
-
-typedef void (*ack_func_type)(void *ack_data, const unsigned char *header, const char *msg);
-
-struct auditd_reply_list {
-	struct audit_reply reply;
-	struct auditd_reply_list *next;
-	ack_func_type ack_func;
-	void *ack_data;
-	unsigned long sequence_id;
-};
-
-#include "auditd-config.h"
-
-void shutdown_events(void);
-int init_event(struct daemon_conf *config);
-void resume_logging(void);
-void enqueue_event(struct auditd_reply_list *rep);
-void enqueue_formatted_event(char *msg, ack_func_type ack_func, void *ack_data, uint32_t sequence_id);
-void *consumer_thread_main(void *arg);
+#include "ev.h"
+void auditd_set_ports(int minp, int maxp);
+int auditd_tcp_listen_init ( struct ev_loop *loop, struct daemon_conf *config );
+void auditd_tcp_listen_uninit ( struct ev_loop *loop );
+void auditd_tcp_listen_check_idle ( struct ev_loop *loop );
 
 #endif
-

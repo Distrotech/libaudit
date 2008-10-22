@@ -29,7 +29,7 @@ define([AC_INIT_NOTICE],
 ])
 
 AC_REVISION($Revision: 1.3 $)dnl
-AC_INIT(audit,1.7.5)
+AC_INIT(audit,1.7.7)
 AC_PREREQ(2.12)dnl
 AM_CONFIG_HEADER(config.h)
 
@@ -40,7 +40,10 @@ AM_INIT_AUTOMAKE
 AM_PROG_LIBTOOL
 AC_SUBST(LIBTOOL_DEPS)
 AM_PATH_PYTHON
+OLDLIBS="$LIBS"
 m4_include([src/libev/libev.m4])
+libev_LIBS="$LIBS"
+LIBS="$OLDLIBS"
 
 echo .
 echo Checking for programs
@@ -58,8 +61,6 @@ AC_C_CONST
 AC_C_INLINE
 AC_CHECK_SIZEOF([unsigned int])
 AC_CHECK_SIZEOF([unsigned long])
-
-#AC_CHECK_LIB(pthread, pthread_create)
 AM_PROG_CC_C_O
 
 ALLWARNS=""
@@ -76,6 +77,28 @@ if test x"$GCC" = x"yes"; then
              ;;
     esac
 fi
+
+#gssapi
+AC_ARG_ENABLE(gssapi_krb5,
+	[AS_HELP_STRING([--enable-gssapi-krb5],[Enable GSSAPI Kerberos 5 support @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) want_gssapi_krb5="yes" ;;
+          no) want_gssapi_krb5="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-gssapi-krb5) ;;
+         esac],
+	[want_gssapi_krb5=yes]
+)
+if test $want_gssapi_krb5 = yes; then
+	AC_CHECK_LIB(gssapi_krb5, gss_acquire_cred, [
+		AC_CHECK_HEADER(gssapi/gssapi.h, [
+			AC_DEFINE(USE_GSSAPI,,
+				  Define if you want to use GSSAPI)
+			gss_libs="-lgssapi_krb5"
+			AC_SUBST(gss_libs)
+		])
+	])
+fi
+AM_CONDITIONAL(ENABLE_GSSAPI, test x$want_gssapi_krb5 = xyes)
 
 ALLDEBUG="-g"
 AC_ARG_WITH(debug,
@@ -102,12 +125,15 @@ else
 fi
 ],WARNS="$ALLWARNS")
 
+AC_MSG_CHECKING(whether to use apparmor)
 AC_ARG_WITH(apparmor,
 AS_HELP_STRING([--with-apparmor],[enable AppArmor events]),
 use_apparmor=$withval,
 use_apparmor=no)
 if test x$use_apparmor != xno ; then
       AC_DEFINE(WITH_APPARMOR,1,[Define if you want to enable AppArmor events.])
+else
+	AC_MSG_RESULT(no)
 fi
 
 AC_ARG_WITH(prelude,
@@ -116,6 +142,7 @@ use_prelude=$withval,
 use_prelude=no)
 if test x$use_prelude = xno ; then
 	have_prelude=no;
+	AC_MSG_RESULT(no)
 else
       AC_CHECK_LIB(prelude, prelude_init,
                  have_prelude=yes, have_prelude=no)
@@ -124,6 +151,49 @@ else
       fi
 fi
 AM_CONDITIONAL(HAVE_PRELUDE, test x$have_prelude = xyes)
+
+AC_MSG_CHECKING(whether to use libwrap)
+AC_ARG_WITH(libwrap,
+[  --with-libwrap[=PATH]   Compile in libwrap (tcp_wrappers) support.],
+[ case "$withval" in
+	no)
+		AC_MSG_RESULT(no)
+		;;
+	yes)
+		AC_MSG_RESULT(yes)
+		AC_CHECK_HEADER(tcpd.h, [],
+			AC_MSG_ERROR([Could not find libwrap headers]),)
+		AC_CHECK_LIB(wrap, request_init, [ LIBWRAP_LIBS="-lwrap" ])
+		AC_CHECK_LIB(nsl, yp_get_default_domain, [
+			LIBWRAP_LIBS="$LIBWRAP_LIBS -lnsl" ])
+		;;
+	*)
+		AC_MSG_RESULT(yes)
+		if test -d "$withval"; then
+			LIBWRAP_LIBS="-L$withval -lwrap"
+		else
+			LIBWRAP_LIBS="$withval"
+		fi
+		AC_CHECK_HEADER(tcpd.h, [],
+			AC_MSG_ERROR([Could not find libwrap headers]))
+		AC_CHECK_LIB(wrap, request_init, [])
+		AC_CHECK_LIB(nsl, yp_get_default_domain, [
+			LIBWRAP_LIBS="$LIBWRAP_LIBS -lnsl" ])
+		OLDLIBS="$LIBS"
+		LIBS="$LIBWRAP_LIBS $LIBS"
+		AC_TRY_LINK([ int allow_severity; int deny_severity; ],
+			[ hosts_access(); ], [],
+			[ AC_MSG_ERROR(Could not find the $withval library.  You must first install tcp_wrappers.) ])
+		LIBS="$OLDLIBS"
+		;;
+	esac ],
+	AC_MSG_RESULT(no)
+)
+if test x"$LIBWRAP_LIBS" != "x"; then
+	AC_DEFINE_UNQUOTED(HAVE_LIBWRAP, [], Define if tcp_wrappers support is enabled )
+fi
+AC_SUBST(LIBWRAP_LIBS)
+AC_SUBST(libev_LIBS)
 
 AC_CONFIG_SUBDIRS([system-config-audit])
 AC_OUTPUT(Makefile lib/Makefile lib/test/Makefile auparse/Makefile auparse/test/Makefile src/Makefile src/mt/Makefile src/libev/Makefile swig/Makefile docs/Makefile init.d/Makefile audisp/Makefile audisp/plugins/Makefile audisp/plugins/builtins/Makefile audisp/plugins/prelude/Makefile audisp/plugins/remote/Makefile audisp/plugins/zos-remote/Makefile audisp/plugins/zos-remote/policy/Makefile bindings/Makefile bindings/python/Makefile tools/Makefile tools/aulastlog/Makefile tools/ausyscall/Makefile)

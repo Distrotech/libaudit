@@ -36,6 +36,7 @@
 #include <limits.h>     /* POSIX_HOST_NAME_MAX */
 #include "auditd-event.h"
 #include "auditd-dispatch.h"
+#include "auditd-listen.h"
 #include "libaudit.h"
 #include "private.h"
 
@@ -148,7 +149,81 @@ int init_event(struct daemon_conf *config)
    dequeue'r is responsible for freeing the memory. */
 void enqueue_event(struct auditd_reply_list *rep)
 {
+	char *buf;
+	int len;
+
+	rep->ack_func = 0;
+	rep->ack_data = 0;
+	rep->sequence_id = 0;
+
+	if (rep->reply.type != AUDIT_DAEMON_RECONFIG) {
+		switch (consumer_data.config->log_format)
+		{
+		case LF_RAW:
+			buf = format_raw(&rep->reply, consumer_data.config);
+			break;
+		case LF_NOLOG:
+			return;
+		default:
+			audit_msg(LOG_ERR, 
+				  "Illegal log format detected %d", 
+				  consumer_data.config->log_format);
+			return;
+		}
+
+		len = strlen (buf);
+		if (len < MAX_AUDIT_MESSAGE_LENGTH - 1) {
+			memcpy (rep->reply.msg.data, buf, len+1);
+		}
+		else
+		{
+			/* FIXME: is truncation the right thing to do?  */
+			memcpy (rep->reply.msg.data, buf, MAX_AUDIT_MESSAGE_LENGTH-1);
+			rep->reply.msg.data[MAX_AUDIT_MESSAGE_LENGTH-1] = 0;
+		}
+	}
+
 	rep->next = NULL; /* new packet goes at end - so zero this */
+
+	pthread_mutex_lock(&consumer_data.queue_lock);
+	if (consumer_data.head == NULL) {
+		consumer_data.head = consumer_data.tail = rep;
+		pthread_cond_signal(&consumer_data.queue_nonempty);
+	} else {
+		/* FIXME: wait for room on the queue */
+
+		/* OK there's room...add it in */
+		consumer_data.tail->next = rep; /* link in at end */
+		consumer_data.tail = rep; /* move end to newest */
+	}
+	pthread_mutex_unlock(&consumer_data.queue_lock);
+}
+
+/* This function takes a preformatted message and places it on the
+   queue. The dequeue'r is responsible for freeing the memory. */
+void enqueue_formatted_event(char *msg, ack_func_type ack_func, void *ack_data, uint32_t sequence_id)
+{
+	int len;
+	struct auditd_reply_list *rep;
+
+	rep = (struct auditd_reply_list *) calloc (1, sizeof (*rep));
+	if (rep == NULL) {
+		audit_msg(LOG_ERR, "Cannot allocate audit reply");
+		return;
+	}
+
+	rep->ack_func = ack_func;
+	rep->ack_data = ack_data;
+	rep->sequence_id = sequence_id;
+
+	len = strlen (msg);
+	if (len < MAX_AUDIT_MESSAGE_LENGTH - 1)
+		memcpy (rep->reply.msg.data, msg, len+1);
+	else {
+		/* FIXME: is truncation the right thing to do?  */
+		memcpy (rep->reply.msg.data, msg, MAX_AUDIT_MESSAGE_LENGTH-1);
+		rep->reply.msg.data[MAX_AUDIT_MESSAGE_LENGTH-1] = 0;
+	}
 
 	pthread_mutex_lock(&consumer_data.queue_lock);
 	if (consumer_data.head == NULL) {
@@ -227,36 +302,29 @@ static void *event_thread_main(void *arg)
 static unsigned int count = 0L;
 static void handle_event(struct auditd_consumer_data *data)
 {
+	char *buf = data->head->reply.msg.data;
+
 	if (data->head->reply.type == AUDIT_DAEMON_RECONFIG) {
 		reconfigure(data);
+		switch (consumer_data.config->log_format)
+		{
+		case LF_RAW:
+			buf = format_raw(&data->head->reply, consumer_data.config);
+			break;
+		case LF_NOLOG:
+			return;
+		default:
+			audit_msg(LOG_ERR, 
+				  "Illegal log format detected %d", 
+				  consumer_data.config->log_format);
+			return;
+		}
 	} else if (data->head->reply.type == AUDIT_DAEMON_ROTATE) {
 		rotate_logs_now(data);
 	}
 	if (!logging_suspended) {
-		char *buf = NULL;
 
-		switch (data->config->log_format)
-		{
-			case LF_RAW:
-				buf = format_raw(&data->head->reply,
-							data->config);
-				break;
-			case LF_NOLOG:
-				return;
-			default:
-				audit_msg(LOG_ERR, 
-					"Illegal log format detected %d", 
-					data->config->log_format);
-				break;
-		}
-
-		/* The only way buf is NULL is if there is an 
-		 * unidentified format...which is impossible since
-		 * start up would have failed. */
-		if (buf) {
-			write_to_log(buf, data);
-			buf[0] = 0;
-		}
+		write_to_log(buf, data);
 
 		/* See if we need to flush to disk manually */
 		if (data->config->flush == FT_INCREMENTAL) {
@@ -295,6 +363,8 @@ static void write_to_log(const char *buf, struct auditd_consumer_data *data)
 	int rc;
 	FILE *f = data->log_file;
 	struct daemon_conf *config = data->config;
+	int ack_type = AUDIT_RMW_TYPE_ACK;
+	const char *msg = "";
 
 	/* write it to disk */
 	rc = fprintf(f, "%s\n", buf);
@@ -307,20 +377,36 @@ static void write_to_log(const char *buf, struct auditd_consumer_data *data)
 		if (saved_errno == ENOSPC && fs_space_left == 1) {
 			fs_space_left = 0;
 			do_disk_full_action(config);
-		} else 
+			ack_type = AUDIT_RMW_TYPE_DISKFULL;
+			msg = "disk full";
+		} else  {
 			do_disk_error_action("write", config);
+			ack_type = AUDIT_RMW_TYPE_DISKERROR;
+			msg = "disk write error";
+		}
+		
+	} else {
 
-		return;
+		/* check log file size & space left on partition */
+		if (config->daemonize == D_BACKGROUND) {
+			// If either of these fail, I consider it an inconvenience 
+			// as opposed to something that is actionable. There may be
+			// some temporary condition that the system recovers from. 
+			// The real error occurs on write.
+			check_log_file_size(data->log_fd, data);
+			check_space_left(data->log_fd, config);
+		}
 	}
 
-	/* check log file size & space left on partition */
-	if (config->daemonize == D_BACKGROUND) {
-		// If either of these fail, I consider it an inconvenience 
-		// as opposed to something that is actionable. There may be
-		// some temporary condition that the system recovers from. 
-		// The real error occurs on write.
-		check_log_file_size(data->log_fd, data);
-		check_space_left(data->log_fd, config);
+	if (data->head->ack_func) {
+		unsigned char header[AUDIT_RMW_HEADER_SIZE];
+
+		if (fs_space_warning)
+			ack_type = AUDIT_RMW_TYPE_DISKLOW;
+
+		AUDIT_RMW_PACK_HEADER (header, 0, ack_type, strlen(msg), data->head->sequence_id);
+
+		data->head->ack_func (data->head->ack_data, header, msg);
 	}
 }
 
@@ -985,6 +1071,25 @@ static void reconfigure(struct auditd_consumer_data *data)
 		}
 	}
 
+	/* Look at network things that do not need restarting */
+	if (oconf->tcp_client_min_port != nconf->tcp_client_min_port ||
+		    oconf->tcp_client_max_port != nconf->tcp_client_max_port) {
+		oconf->tcp_client_min_port = nconf->tcp_client_min_port;
+		oconf->tcp_client_max_port = nconf->tcp_client_max_port;
+		auditd_set_ports(oconf->tcp_client_min_port,
+				oconf->tcp_client_max_port);
+	}
+	if (oconf->tcp_client_max_idle != nconf->tcp_client_max_idle) {
+		oconf->tcp_client_max_idle = nconf->tcp_client_max_idle;
+		periodic_reconfigure();
+	}
+	if (oconf->tcp_listen_port != nconf->tcp_listen_port ||
+			oconf->tcp_listen_queue != nconf->tcp_listen_queue) {
+		oconf->tcp_listen_port = nconf->tcp_listen_port;
+		oconf->tcp_listen_queue = nconf->tcp_listen_queue;
+		// FIXME: need to restart the network stuff
+	}
+	
 	/* At this point we will work on the items that are related to 
 	 * a single log file. */
 
