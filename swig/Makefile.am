@@ -20,7 +20,7 @@
 #   Steve Grubb <sgrubb@redhat.com>
 #
 EXTRA_DIST = auditswig.i
-CONFIG_CLEAN_FILES = Makefile.in *.loT *.rej *.orig
+CONFIG_CLEAN_FILES = *.loT *.rej *.orig
 AM_CFLAGS = -fPIC -DPIC
 PYLIBVER ?= python$(PYTHON_VERSION)
 INCLUDES = -I. -I$(top_builddir) -I${top_srcdir}/lib -I/usr/include/$(PYLIBVER)
@@ -34,5 +34,5 @@ nodist__audit_la_SOURCES  = audit_wrap.c
 audit.py audit_wrap.c: ${srcdir}/auditswig.i 
 	swig -o audit_wrap.c -python ${INCLUDES} ${srcdir}/auditswig.i 
 
-CLEANFILES = audit.py audit_wrap.c *~
+CLEANFILES = audit.py* audit_wrap.c *~
 

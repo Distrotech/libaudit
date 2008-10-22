@@ -19,7 +19,7 @@
 ## Settings
 ACLOCAL_AMFLAGS = -I m4
 applicationsdir = $(datarootdir)/applications
-CONFIG_CLEAN_FILES = Makefile.in *.rej *.orig
+CONFIG_CLEAN_FILES = *.rej *.orig
 
 ## Targets
 SUBDIRS = po
@@ -101,7 +101,4 @@ src/system-config-audit: src/system-config-audit.in Makefile
 		< $(srcdir)/src/system-config-audit.in > $@
 
 @INTLTOOL_DESKTOP_RULE@
-
-clean-generic:
-	rm -rf autom4te*.cache
 

@@ -20,13 +20,14 @@
 #   Steve Grubb <sgrubb@redhat.com>
 #
 
-CONFIG_CLEAN_FILES = Makefile.in *.rej *.orig
+CONFIG_CLEAN_FILES = *.rej *.orig
 
 EXTRA_DIST = $(man_MANS)
 
 man_MANS = audit_add_rule_data.3 audit_add_watch.3 auditctl.8 auditd.8 \
 auditd.conf.5 audit_delete_rule_data.3 audit_detect_machine.3 \
-audit_getloginuid.3 audit_get_reply.3 auparse_goto_record_num.3 \
+audit_encode_nv_string.3 audit_getloginuid.3 \
+audit_get_reply.3 auparse_goto_record_num.3 \
 audit_log_acct_message.3 audit_log_user_avc_message.3 \
 audit_log_user_command.3 audit_log_user_comm_message.3 \
 audit_log_user_message.3 audit_log_user_semanage_message.3 \
@@ -37,8 +38,9 @@ audit_set_rate_limit.3 audit_update_watch_perms.3 auparse_add_callback.3 \
 auparse_destroy.3 auparse_feed.3 auparse_find_field.3 \
 auparse_find_field_next.3 auparse_first_field.3 auparse_first_record.3 \
 auparse_flush_feed.3 auparse_get_field_int.3 auparse_get_field_name.3 \
-auparse_get_field_str.3 auparse_get_filename.3 auparse_get_line_number.3 \
-auparse_get_milli.3 auparse_get_node.3 auparse_get_num_fields.3 \
+auparse_get_field_str.3 auparse_get_field_type.3 auparse_get_filename.3 \
+auparse_get_line_number.3 auparse_get_milli.3 \
+auparse_get_node.3 auparse_get_num_fields.3 \
 auparse_get_num_records.3 auparse_get_record_text.3 \
 auparse_get_serial.3 auparse_get_time.3 auparse_get_timestamp.3 \
 auparse_get_type.3 auparse_init.3 auparse_interpret_field.3 \

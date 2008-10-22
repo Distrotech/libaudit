@@ -20,10 +20,10 @@
 #   Steve Grubb <sgrubb@redhat.com>
 # 
 
-CONFIG_CLEAN_FILES = Makefile.in *.loT *.rej *.orig
+CONFIG_CLEAN_FILES = *.loT *.rej *.orig
 EXTRA_DIST = au-remote.conf audisp-remote.conf $(man_MANS)
 AUTOMAKE_OPTIONS = no-dependencies
-INCLUDES = -I.. -I${top_srcdir}/lib 
+INCLUDES = -I${top_srcdir} -I${top_srcdir}/lib 
 prog_confdir = $(sysconfdir)/audisp
 prog_conf = audisp-remote.conf
 plugin_confdir=$(prog_confdir)/plugins.d
@@ -34,7 +34,7 @@ man_MANS = audisp-remote.8 audisp-remote.conf.5
 
 audisp_remote_SOURCES = audisp-remote.c remote-config.c
 audisp_remote_CFLAGS = -fPIE -DPIE -g -D_REENTRANT -D_GNU_SOURCE -Wundef
-audisp_remote_LDFLAGS = -pie -Wl,-z,relro
+audisp_remote_LDFLAGS = -pie -Wl,-z,relro $(gss_libs)
 
 install-data-hook:
 	mkdir -p -m 0750 ${DESTDIR}${plugin_confdir}

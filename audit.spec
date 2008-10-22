@@ -1,12 +1,10 @@
 %define sca_version 0.4.8
 %define sca_release 1
-%define selinux_variants mls strict targeted
-%define selinux_policyver 3.2.5 
 %{!?python_sitelib: %define python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
 
 Summary: User space tools for 2.6 kernel auditing
 Name: audit
-Version: 1.7.5
+Version: 1.7.8
 Release: 1
 License: GPLv2+
 Group: System Environment/Daemons
@@ -14,6 +12,7 @@ URL: http://people.redhat.com/sgrubb/audit/
 Source0: http://people.redhat.com/sgrubb/audit/%{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildRequires: gettext-devel intltool libtool swig python-devel
+BuildRequires: tcp_wrappers-devel krb5-devel
 BuildRequires: kernel-headers >= 2.6.18
 BuildRequires: automake >= 1.9
 BuildRequires: autoconf >= 2.59
@@ -62,18 +61,10 @@ Summary: Plugins for the audit event dispatcher
 License: GPLv2+
 Group: System Environment/Daemons
 BuildRequires: openldap-devel
-%if "%{selinux_policyver}" != ""
-BuildRequires: checkpolicy selinux-policy-devel >= %{selinux_policyver}
-%endif
 BuildRequires: libprelude-devel >= 0.9.16
 Requires: %{name} = %{version}-%{release}
 Requires: %{name}-libs = %{version}-%{release}
 Requires: openldap
-%if "%{selinux_policyver}" != ""
-Requires: selinux-policy >= %{selinux_policyver}
-%endif
-Requires(post): /usr/sbin/semodule /sbin/restorecon
-Requires(postun): /usr/sbin/semodule
 
 %description -n audispd-plugins
 The audispd-plugins package provides plugins for the real-time
@@ -95,27 +86,10 @@ A graphical utility for editing audit configuration.
 
 %prep
 %setup -q
-mkdir zos-remote-policy
-cp -p audisp/plugins/zos-remote/policy/audispd-zos-remote.* zos-remote-policy
 
 %build
-(cd system-config-audit; ./autogen.sh)
-aclocal && autoconf && autoheader && automake
-%configure --sbindir=/sbin --libdir=/%{_lib} --with-prelude
+%configure --sbindir=/sbin --libdir=/%{_lib} --with-prelude --with-libwrap --enable-gssapi-krb5
 make %{?_smp_mflags}
-cd zos-remote-policy
-for selinuxvariant in %{selinux_variants}
-do
-  if [ "${selinuxvariant}" = "mls" ]; then
-    TYPE=mls-mls
-  else
-    TYPE=${selinuxvariant}-mcs
-  fi
-  make -f /usr/share/selinux/devel/Makefile
-  mv audispd-zos-remote.pp audispd-zos-remote.pp.${selinuxvariant}
-  make -f /usr/share/selinux/devel/Makefile clean
-done
-cd -
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -126,12 +100,6 @@ mkdir -p $RPM_BUILD_ROOT/%{_libdir}/audit
 mkdir -p $RPM_BUILD_ROOT/%{_var}/log/audit
 make DESTDIR=$RPM_BUILD_ROOT %{?_smp_mflags} install
 make -C system-config-audit DESTDIR=$RPM_BUILD_ROOT install-fedora
-for selinuxvariant in %{selinux_variants}
-do
-  install -d $RPM_BUILD_ROOT/%{_datadir}/selinux/${selinuxvariant}
-  install -p -m 644 zos-remote-policy/audispd-zos-remote.pp.${selinuxvariant} \
-    $RPM_BUILD_ROOT/%{_datadir}/selinux/${selinuxvariant}/audispd-zos-remote.pp
-done
 
 mkdir -p $RPM_BUILD_ROOT/%{_libdir}
 # This winds up in the wrong place when libtool is involved
@@ -153,6 +121,8 @@ rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_audit.a
 rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_audit.la
 rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_auparse.a
 rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/_auparse.la
+rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/auparse.a
+rm -f $RPM_BUILD_ROOT/%{_libdir}/python?.?/site-packages/auparse.la
 
 # On platforms with 32 & 64 bit libs, we need to coordinate the timestamp
 touch -r ./audit.spec $RPM_BUILD_ROOT/etc/libaudit.conf
@@ -164,25 +134,13 @@ desktop-file-install					\
 	--delete-original				\
 	system-config-audit/system-config-audit.desktop
 
-# This is a reminder to enable it when tests
-# aren't based on postfix uids
-#% check
-#make check
+%check
+make check
 
 %clean
 rm -rf $RPM_BUILD_ROOT
-rm -rf zos-remote-policy
 
 %post libs -p /sbin/ldconfig
-
-%post -n audispd-plugins
-for selinuxvariant in %{selinux_variants}
-do
-  /usr/sbin/semodule -s $selinuxvariant \
-    -i %{_datadir}/selinux/$selinuxvariant/audispd-zos-remote.pp \
-    &> /dev/null || :
-done
-/sbin/restorecon -F /sbin/audispd-zos-remote /etc/audisp/zos-remote.conf
 
 %post
 /sbin/chkconfig --add auditd
@@ -214,14 +172,6 @@ fi
 
 %postun libs -p /sbin/ldconfig
 
-%postun -n audispd-plugins
-if [ $1 -eq 0 ]; then
- for selinuxvariant in %{selinux_variants}
- do
-   /usr/sbin/semodule -s $selinuxvariant -r audispd-zos-remote &>/dev/null || :
- done
-fi
-
 %postun
 if [ $1 -ge 1 ]; then
    /sbin/service auditd condrestart > /dev/null 2>&1 || :
@@ -244,13 +194,12 @@ fi
 %{_includedir}/auparse.h
 %{_includedir}/auparse-defs.h
 %{_mandir}/man3/*
-%{_mandir}/man5/ausearch-expression.5.gz
 
 %files libs-python
 %defattr(-,root,root)
 %attr(755,root,root) %{_libdir}/python?.?/site-packages/_audit.so
 %attr(755,root,root) %{_libdir}/python?.?/site-packages/auparse.so
-%{_libdir}/python?.?/site-packages/auparse-*.egg-info
+#%{_libdir}/python?.?/site-packages/auparse-*.egg-info
 %{python_sitelib}/audit.py*
 
 %files
@@ -266,6 +215,7 @@ fi
 %attr(644,root,root) %{_mandir}/man8/ausyscall.8.gz
 %attr(644,root,root) %{_mandir}/man5/auditd.conf.5.gz
 %attr(644,root,root) %{_mandir}/man5/audispd.conf.5.gz
+%attr(644,root,root) %{_mandir}/man5/ausearch-expression.5.gz
 %attr(750,root,root) /sbin/auditctl
 %attr(750,root,root) /sbin/auditd
 %attr(755,root,root) /sbin/ausearch
@@ -294,7 +244,6 @@ fi
 %config(noreplace) %attr(640,root,root) /etc/audisp/plugins.d/audispd-zos-remote.conf
 %config(noreplace) %attr(640,root,root) /etc/audisp/zos-remote.conf
 %attr(750,root,root) /sbin/audispd-zos-remote
-%attr(644,root,root) %{_datadir}/selinux/*/audispd-zos-remote.pp
 %config(noreplace) %attr(640,root,root) /etc/audisp/plugins.d/au-prelude.conf
 %config(noreplace) %attr(640,root,root) /etc/audisp/audisp-prelude.conf
 %attr(750,root,root) /sbin/audisp-prelude
@@ -322,7 +271,35 @@ fi
 %config(noreplace) %{_sysconfdir}/security/console.apps/system-config-audit-server
 
 %changelog
-* Mon May 19 2008 Steve Grubb <sgrubb@redhat.com> 1.7.5-1
+* Wed Sep 11 2008 Steve Grubb <sgrubb@redhat.com> 1.7.8-1
+
+* Wed Sep 11 2008 Steve Grubb <sgrubb@redhat.com> 1.7.7-1
+- Bug fixes for gss code in remote logging (DJ Delorie)
+- Fix ausearch -i to keep the node field in the output
+- ausyscall now does strstr match on syscall names
+- Makefile cleanup (Philipp Hahn)
+- Add watched syscall support to audisp-prelude
+- Use the right define for tcp_wrappers in auditd
+- Expose encoding API for fields being logged from user space
+
+* Wed Sep 11 2008 Steve Grubb <sgrubb@redhat.com> 1.7.6-1
+- Update event record list and aureport classifications (Yu Zhiguo/Peng Haitao)
+- Add subject to audit daemon events (Chu Li)
+- Fix parsing of acct & exe fields in user records (Peng Haitao)
+- Make client error handling in audisp-remote robust (DJ Delorie)
+- Add tcp_wrappers support for auditd
+- Updated syscall tables for 2.6.27 kernel
+- Add heartbeat exchange to remote logging protocol (DJ Delorie)
+- Audit connect/disconnect of remote clients
+- In ausearch, collect pid from AVC records (Peng Haitao)
+- Add auparse_get_field_type function to describe field's contents
+- Add GSS/Kerberos encryption to the remote protocol (DJ Delorie)
+
+* Mon Aug 25 2008 Steve Grubb <sgrubb@redhat.com> 1.7.5-1
+- Update system-config-audit to 0.4.8
+- Whole lot of bug fixes - see ChangeLog for details
+- Reimplement auditd main loop using libev
+- Add TCP listener to auditd to receive remote events
 
 * Mon May 19 2008 Steve Grubb <sgrubb@redhat.com> 1.7.4-1
 - Fix interpreting of keys in syscall records

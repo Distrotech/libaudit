@@ -20,46 +20,57 @@
 #   Steve Grubb <sgrubb@redhat.com>
 #
 
-CONFIG_CLEAN_FILES = Makefile.in *.loT *.rej *.orig
-
-check_PROGRAMS = auparse_test
+CONFIG_CLEAN_FILES = *.loT *.rej *.orig *.cur
+DISTCLEANFILES = test*.log
+AUTOMAKE_OPTIONS = no-dependencies
+check_PROGRAMS = auparse_test 
 dist_check_SCRIPTS = auparse_test.py
-EXTRA_DIST = auparse_test.ref README test.log test2.log
+EXTRA_DIST = auparse_test.ref auparse_test.ref.py test.log test2.log
 
-INCLUDES = -I.. -I${top_srcdir}/lib
+INCLUDES = -I${top_srcdir}/auparse -I${top_srcdir}/lib
 
 auparse_test_SOURCES = auparse_test.c
 auparse_test_LDFLAGS = -static
-auparse_test_LDADD = -L../.libs/ -L../../lib/.libs -lauparse -laudit
-auparse_test_DEPENDENCIES = ../.libs/libauparse.a \
-	$(srcdir)/../*.c $(srcdir)/../*.h
+auparse_test_LDADD = -L${top_builddir}/auparse/.libs \
+	-L${top_builddir}/lib/.libs -lauparse -laudit
 
 drop_srcdir = sed 's,$(srcdir)/test,test,'
 
 check: auparse_test
-	LD_LIBRARY_PATH=../.libs srcdir=$(srcdir) $(srcdir)/auparse_test.py \
+	- cp $(top_srcdir)/auparse/test/test*.log .
+	./auparse_test > auparse_test.cur
+	diff -u $(top_srcdir)/auparse/test/auparse_test.ref auparse_test.cur
+	PYTHONPATH=${top_builddir}/bindings/python/.libs/:${top_builddir}/swig:${top_builddir}/swig/.libs \
+	LD_LIBRARY_PATH=${top_builddir}/auparse/.libs \
+		srcdir=$(srcdir) $(srcdir)/auparse_test.py \
 		| $(drop_srcdir) > auparse_test.cur
-	diff -u $(srcdir)/auparse_test.ref auparse_test.cur
+	diff -u $(top_srcdir)/auparse/test/auparse_test.ref.py auparse_test.cur
+	echo -e "===================\nAuparse Test Passes\n==================="
 
 diffcheck: auparse_test
 	./auparse_test > auparse_test.cur
-	diff $(srcdir)/auparse_test.ref auparse_test.cur
+	diff -u $(srcdir)/auparse_test.ref auparse_test.cur
 
 memcheck: auparse_test
 	valgrind --leak-check=yes --show-reachable=yes ./auparse_test 
 
-pycheck: auparse_test.py ../../bindings/python/build/*/auparse.so
-	LD_LIBRARY_PATH=../.libs srcdir=$(srcdir) $(srcdir)/auparse_test.py
+pycheck: auparse_test.py ${top_builddir}/bindings/python/build/*/auparse.so
+	PYTHONPATH=${top_builddir}/bindings/python/.libs/:${top_builddir}/swig:${top_builddir}/swig/.libs \
+	LD_LIBRARY_PATH=${top_builddir}/auparse/.libs \
+		srcdir=$(srcdir) $(srcdir)/auparse_test.py
 
-pydiffcheck: auparse_test.py ../../bindings/python/build/*/auparse.so
-	LD_LIBRARY_PATH=../.libs srcdir=$(srcdir) $(srcdir)/auparse_test.py \
+pydiffcheck: auparse_test.py ${top_builddir}/bindings/python/build/*/auparse.so
+	PYTHONPATH=${top_builddir}/bindings/python/.libs/:${top_builddir}/swig:${top_builddir}/swig/.libs \
+	LD_LIBRARY_PATH=${top_builddir}/auparse/.libs \
+		srcdir=$(srcdir) $(srcdir)/auparse_test.py \
 		| $(drop_srcdir) > auparse_test.cur
 	diff $(srcdir)/auparse_test.ref auparse_test.cur
 
-pymemcheck: auparse_test.py ../../bindings/python/build/*/auparse.so
-	LD_LIBRARY_PATH=../.libs srcdir=$(srcdir) valgrind --leak-check=yes --show-reachable=yes python $(srcdir)/auparse_test.py
+pymemcheck: auparse_test.py ${top_builddir}/bindings/python/build/*/auparse.so
+	PYTHONPATH=${top_builddir}/bindings/python/.libs/:${top_builddir}/swig:${top_builddir}/swig/.libs \
+	LD_LIBRARY_PATH=${top_builddir}/auparse/.libs srcdir=$(srcdir) valgrind --leak-check=yes --show-reachable=yes python $(srcdir)/auparse_test.py
 
-../../bindings/python/build/*/auparse.so: ../../bindings/python/auparse_python.c
-	cd ../../bindings/python && make
+${top_builddir}/bindings/python/build/*/auparse.so: ${top_srcdir}/bindings/python/auparse_python.c
+	cd ${top_builddir}/bindings/python && make
 clean-generic:
 	rm -f *.cur

@@ -458,6 +458,22 @@ static void signal_plugins(int sig)
 	}
 }
 
+static int write_to_plugin(event_t *e, lnode *conf)
+{
+	int rc;
+	struct iovec vec[2];
+
+	vec[0].iov_base = &e->hdr;
+	vec[0].iov_len = sizeof(struct audit_dispatcher_header);
+
+	vec[1].iov_base = e->data;
+	vec[1].iov_len = MAX_AUDIT_MESSAGE_LENGTH;
+	do {
+		rc = writev(conf->p->plug_pipe[1], vec, 2);
+	} while (rc < 0 && errno == EINTR);
+	return rc;
+}
+
 /* Returns 0 on stop, and 1 on HUP */
 static int event_loop(void)
 {
@@ -544,7 +560,7 @@ static int event_loop(void)
 	while (stop == 0) {
 		event_t *e;
 		const char *type;
-		char *v, unknown[32];
+		char *v, *ptr, unknown[32];
 		unsigned int len;
 		lnode *conf;
 
@@ -572,6 +588,19 @@ static int event_loop(void)
 		} else
 			len = asprintf(&v, "type=%s msg=%.*s\n", 
 				type, e->hdr.size, e->data);
+		if (len <= 0) {
+			free(e); /* Either corrupted event or no memory */
+			continue;
+		}
+
+		/* Strip newlines from event record */
+		ptr = v;
+		while ((ptr = strchr(ptr, 0x0A)) != NULL) {
+			if (ptr != &v[len-1])
+				*ptr = ' ';
+			else
+				break; /* Done - exit loop */
+		}
 
 		/* Distribute event to the plugins */
 		plist_first(&plugin_conf);
@@ -599,20 +628,7 @@ static int event_loop(void)
 							v, len);
 					} while (rc < 0 && errno == EINTR);
 				} else {
-					struct iovec vec[2];
-
-					vec[0].iov_base = &e->hdr;
-					vec[0].iov_len = sizeof(struct
-						audit_dispatcher_header);
-
-					vec[1].iov_base = &e->data;
-					vec[1].iov_len =
-						MAX_AUDIT_MESSAGE_LENGTH;
-					do {
-						rc = writev(
-							conf->p->plug_pipe[1],
-							vec, 2);
-					} while (rc < 0 && errno == EINTR);
+					rc = write_to_plugin(e, conf);
 				}
 				if (rc < 0 && errno == EPIPE) {
 					/* Child disappeared ? */
@@ -623,6 +639,9 @@ static int event_loop(void)
 					close(conf->p->plug_pipe[1]);
 					conf->p->plug_pipe[1] = -1;
 					conf->p->active = A_NO;
+					if (start_one_plugin(conf) == 0) {
+						rc = write_to_plugin(e, conf);
+					} 
 				}
 			}
 		} while ((conf = plist_next(&plugin_conf)));

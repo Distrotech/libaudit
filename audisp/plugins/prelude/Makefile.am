@@ -20,10 +20,10 @@
 #   Steve Grubb <sgrubb@redhat.com>
 # 
 
-CONFIG_CLEAN_FILES = Makefile.in *.rej *.orig
+CONFIG_CLEAN_FILES = *.rej *.orig
 EXTRA_DIST = au-prelude.conf audisp-prelude.conf
 AUTOMAKE_OPTIONS = no-dependencies
-INCLUDES = -I.. -I${top_srcdir}/lib -I${top_srcdir}/auparse
+INCLUDES = -I${top_srcdir} -I${top_srcdir}/lib -I${top_srcdir}/auparse
 LIBS = -L${top_srcdir}/auparse/.libs -lauparse -lprelude 
 LDADD = -lpthread 
 prog_confdir = $(sysconfdir)/audisp

@@ -20,9 +20,8 @@
 #   Klaus Heinrich Kiwi <klausk@br.ibm.com>
 #
 
-INCLUDES = -I.. -I${top_srcdir}/lib -I${top_srcdir}/auparse
-CONFIG_CLEAN_FILES = Makefile.in *.rej *.orig
-SUBDIRS = policy
+INCLUDES = -I${top_srcdir} -I${top_srcdir}/lib -I${top_srcdir}/auparse
+CONFIG_CLEAN_FILES = *.rej *.orig
 AUTOMAKE_OPTIONS = no-dependencies
 EXTRA_DIST = zos-remote.conf audispd-zos-remote.conf
 LIBS = -L${top_builddir}/auparse -lauparse

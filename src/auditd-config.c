@@ -39,6 +39,8 @@
 #include "libaudit.h"
 #include "private.h"
 
+#define TCP_PORT_MAX 65535
+
 /* Local prototypes */
 struct nv_pair
 {
@@ -103,6 +105,20 @@ static int disk_error_action_parser(struct nv_pair *nv, int line,
 		struct daemon_conf *config);
 static int priority_boost_parser(struct nv_pair *nv, int line,
 		struct daemon_conf *config);
+static int tcp_listen_port_parser(struct nv_pair *nv, int line,
+		struct daemon_conf *config);
+static int tcp_listen_queue_parser(struct nv_pair *nv, int line,
+		struct daemon_conf *config);
+static int tcp_client_ports_parser(struct nv_pair *nv, int line,
+		struct daemon_conf *config);
+static int tcp_client_max_idle_parser(struct nv_pair *nv, int line,
+		struct daemon_conf *config);
+static int enable_krb5_parser(struct nv_pair *nv, int line,
+		struct daemon_conf *config);
+static int krb5_principal_parser(struct nv_pair *nv, int line,
+		struct daemon_conf *config);
+static int krb5_key_file_parser(struct nv_pair *nv, int line,
+		struct daemon_conf *config);
 static int sanity_check(struct daemon_conf *config);
 
 static const struct kw_pair keywords[] = 
@@ -127,6 +143,13 @@ static const struct kw_pair keywords[] =
   {"disk_full_action",         disk_full_action_parser,		1 },
   {"disk_error_action",        disk_error_action_parser,	1 },
   {"priority_boost",           priority_boost_parser,		0 },
+  {"tcp_listen_port",          tcp_listen_port_parser,          0 },
+  {"tcp_listen_queue",         tcp_listen_queue_parser,         0 },
+  {"tcp_client_ports",         tcp_client_ports_parser,         0 },
+  {"tcp_client_max_idle",      tcp_client_max_idle_parser,      0 },
+  {"enable_krb5",              enable_krb5_parser,              0 },
+  {"krb5_principal",           krb5_principal_parser,           0 },
+  {"krb5_key_file",            krb5_key_file_parser,            0 },
   { NULL,                      NULL }
 };
 
@@ -186,6 +209,15 @@ static const struct nv_list node_name_formats[] =
   { NULL,  0 }
 };
 
+#ifdef USE_GSSAPI
+static const struct nv_list enable_krb5_values[] =
+{
+  {"yes",  1 },
+  {"no", 0 },
+  { NULL,  0 }
+};
+#endif
+
 const char *email_command = "/usr/lib/sendmail";
 static int allow_links = 0;
 
@@ -227,6 +259,14 @@ static void clear_config(struct daemon_conf *config)
 	config->disk_full_exe = NULL;
 	config->disk_error_action = FA_SYSLOG;
 	config->disk_error_exe = NULL;
+	config->tcp_listen_port = 0;
+	config->tcp_listen_queue = 5;
+	config->tcp_client_min_port = 0;
+	config->tcp_client_max_port = TCP_PORT_MAX;
+	config->tcp_client_max_idle = 0;
+	config->enable_krb5 = 0;
+	config->krb5_principal = NULL;
+	config->krb5_key_file = NULL;
 }
 
 static log_test_t log_test = TEST_AUDITD;
@@ -592,6 +632,12 @@ static int dispatch_parser(struct nv_pair *nv, int line,
 	}
 
 	free((void *)tdir);
+
+	/* Bypass the perms check if group is not root since
+	 * this will fail under normal circumstances */
+	if (config->log_group != 0 && getuid() != 0)
+		goto bypass;
+
 	/* if the file exists, see that its regular, owned by root,
 	 * and not world anything */
 	fd = open(nv->value, O_RDONLY);
@@ -620,6 +666,7 @@ static int dispatch_parser(struct nv_pair *nv, int line,
 		audit_msg(LOG_ERR, "%s permissions should be 0750", nv->value);
 		return 1;
 	}
+bypass:
 	free((void *)config->dispatcher);
 	config->dispatcher = strdup(nv->value);
 	if (config->dispatcher == NULL)
@@ -1109,6 +1156,272 @@ static int priority_boost_parser(struct nv_pair *nv, int line,
 	return 0;
 }
 
+static int tcp_listen_port_parser(struct nv_pair *nv, int line,
+	struct daemon_conf *config)
+{
+	const char *ptr = nv->value;
+	unsigned long i;
+
+	audit_msg(LOG_DEBUG, "tcp_listen_port_parser called with: %s",
+		  nv->value);
+
+	/* check that all chars are numbers */
+	for (i=0; ptr[i]; i++) {
+		if (!isdigit(ptr[i])) {
+			audit_msg(LOG_ERR, 
+				"Value %s should only be numbers - line %d",
+				nv->value, line);
+			return 1;
+		}
+	}
+
+	/* convert to unsigned int */
+	errno = 0;
+	i = strtoul(nv->value, NULL, 10);
+	if (errno) {
+		audit_msg(LOG_ERR, 
+			"Error converting string to a number (%s) - line %d",
+			strerror(errno), line);
+		return 1;
+	}
+	/* Check its range */
+	if (i > TCP_PORT_MAX) {
+		audit_msg(LOG_ERR, 
+			"Error - converted number (%s) is too large - line %d",
+			nv->value, line);
+		return 1;
+	}
+	if (i < 1) {
+		audit_msg(LOG_ERR, 
+			"Error - converted number (%s) is too small - line %d",
+			nv->value, line);
+		return 1;
+	}
+	config->tcp_listen_port = (unsigned int)i;
+	return 0;
+}
+
+static int tcp_listen_queue_parser(struct nv_pair *nv, int line,
+	struct daemon_conf *config)
+{
+	const char *ptr = nv->value;
+	unsigned long i;
+
+	audit_msg(LOG_DEBUG, "tcp_listen_queue_parser called with: %s",
+		  nv->value);
+
+	/* check that all chars are numbers */
+	for (i=0; ptr[i]; i++) {
+		if (!isdigit(ptr[i])) {
+			audit_msg(LOG_ERR, 
+				"Value %s should only be numbers - line %d",
+				nv->value, line);
+			return 1;
+		}
+	}
+
+	/* convert to unsigned int */
+	errno = 0;
+	i = strtoul(nv->value, NULL, 10);
+	if (errno) {
+		audit_msg(LOG_ERR, 
+			"Error converting string to a number (%s) - line %d",
+			strerror(errno), line);
+		return 1;
+	}
+	/* Check its range.  While this value is technically
+	   unlimited, it's limited by the kernel, and we limit it here
+	   for sanity. */
+	if (i > TCP_PORT_MAX) {
+		audit_msg(LOG_ERR, 
+			"Error - converted number (%s) is too large - line %d",
+			nv->value, line);
+		return 1;
+	}
+	if (i < 1) {
+		audit_msg(LOG_ERR, 
+			"Error - converted number (%s) is too small - line %d",
+			nv->value, line);
+		return 1;
+	}
+	config->tcp_listen_queue = (unsigned int)i;
+	return 0;
+}
+
+static int tcp_client_ports_parser(struct nv_pair *nv, int line,
+	struct daemon_conf *config)
+{
+	const char *ptr = nv->value;
+	unsigned long i, minv, maxv;
+	const char *saw_dash = NULL;
+
+	audit_msg(LOG_DEBUG, "tcp_listen_queue_parser called with: %s",
+		  nv->value);
+
+	/* check that all chars are numbers, with an optional inclusive '-'. */
+	for (i=0; ptr[i]; i++) {
+		if (i > 0 && ptr[i] == '-' && ptr[i+1] != '\0') {
+			saw_dash = ptr + i;
+			continue;
+		}
+		if (!isdigit(ptr[i])) {
+			audit_msg(LOG_ERR, 
+				"Value %s should only be numbers, or two numbers separated by a dash - line %d",
+				nv->value, line);
+			return 1;
+		}
+	}
+	for (; ptr[i]; i++) {
+		if (!isdigit(ptr[i])) {
+			audit_msg(LOG_ERR, 
+				"Value %s should only be numbers, or two numbers separated by a dash - line %d",
+				nv->value, line);
+			return 1;
+		}
+	}
+
+	/* convert to unsigned int */
+	errno = 0;
+	maxv = minv = strtoul(nv->value, NULL, 10);
+	if (errno) {
+		audit_msg(LOG_ERR, 
+			"Error converting string to a number (%s) - line %d",
+			strerror(errno), line);
+		return 1;
+	}
+	if (saw_dash) {
+		maxv = strtoul(saw_dash + 1, NULL, 10);
+		if (errno) {
+			audit_msg(LOG_ERR, 
+				  "Error converting string to a number (%s) - line %d",
+				  strerror(errno), line);
+			return 1;
+		}
+	}
+	/* Check their ranges. */
+	if (minv > TCP_PORT_MAX) {
+		audit_msg(LOG_ERR, 
+			"Error - converted number (%ld) is too large - line %d",
+			  minv, line);
+		return 1;
+	}
+	if (maxv > TCP_PORT_MAX) {
+		audit_msg(LOG_ERR, 
+			"Error - converted number (%ld) is too large - line %d",
+			  maxv, line);
+		return 1;
+	}
+	if (minv > maxv) {
+		audit_msg(LOG_ERR, 
+		     "Error - converted range (%ld-%ld) is reversed - line %d",
+			  minv, maxv, line);
+		return 1;
+	}
+	config->tcp_client_min_port = (unsigned int)minv;
+	config->tcp_client_max_port = (unsigned int)maxv;
+	return 0;
+}
+
+static int tcp_client_max_idle_parser(struct nv_pair *nv, int line,
+	struct daemon_conf *config)
+{
+	const char *ptr = nv->value;
+	unsigned long i;
+
+	audit_msg(LOG_DEBUG, "tcp_client_max_idle_parser called with: %s",
+		  nv->value);
+
+	/* check that all chars are numbers */
+	for (i=0; ptr[i]; i++) {
+		if (!isdigit(ptr[i])) {
+			audit_msg(LOG_ERR, 
+				"Value %s should only be numbers - line %d",
+				nv->value, line);
+			return 1;
+		}
+	}
+
+	/* convert to unsigned int */
+	errno = 0;
+	i = strtoul(nv->value, NULL, 10);
+	if (errno) {
+		audit_msg(LOG_ERR, 
+			"Error converting string to a number (%s) - line %d",
+			strerror(errno), line);
+		return 1;
+	}
+	/* Check its range.  While this value is technically
+	   unlimited, it's limited by the kernel, and we limit it here
+	   for sanity. */
+	if (i > INT_MAX) {
+		audit_msg(LOG_ERR, 
+			"Error - converted number (%s) is too large - line %d",
+			nv->value, line);
+		return 1;
+	}
+	config->tcp_client_max_idle = (unsigned int)i;
+	return 0;
+}
+
+static int enable_krb5_parser(struct nv_pair *nv, int line,
+	struct daemon_conf *config)
+{
+	unsigned long i;
+
+	audit_msg(LOG_DEBUG, "enable_krb5_parser called with: %s",
+		  nv->value);
+
+#ifndef USE_GSSAPI
+	audit_msg(LOG_NOTICE,
+		"GSSAPI support is not enabled, ignoring value at line %d",
+		line);
+	return 0;
+#else
+	for (i=0; enable_krb5_values[i].name != NULL; i++) {
+		if (strcasecmp(nv->value, enable_krb5_values[i].name) == 0) {
+			config->enable_krb5 = enable_krb5_values[i].option;
+			return 0;
+		}
+	}
+	audit_msg(LOG_ERR, "Option %s not found - line %d", nv->value, line);
+	return 1;
+#endif
+}
+
+static int krb5_principal_parser(struct nv_pair *nv, int line,
+	struct daemon_conf *config)
+{
+	const char *ptr = nv->value;
+
+	audit_msg(LOG_DEBUG,"krb5_principal_parser called with: %s",nv->value);
+#ifndef USE_GSSAPI
+	audit_msg(LOG_NOTICE,
+		"GSSAPI support is not enabled, ignoring value at line %d",
+		line);
+	return 0;
+#else
+	config->krb5_principal = strdup(ptr);
+	return 0;
+#endif
+}
+
+static int krb5_key_file_parser(struct nv_pair *nv, int line,
+	struct daemon_conf *config)
+{
+	const char *ptr = nv->value;
+
+	audit_msg(LOG_DEBUG, "krb5_key_file_parser called with: %s", nv->value);
+#ifndef USE_GSSAPI
+	audit_msg(LOG_NOTICE,
+		"GSSAPI support is not enabled, ignoring value at line %d",
+		line);
+	return 0;
+#else
+	config->krb5_key_file = strdup(ptr);
+	return 0;
+#endif
+}
+
 /*
  * This function is where we do the integrated check of the audit config
  * options. At this point, all fields have been read. Returns 0 if no
@@ -1170,6 +1483,8 @@ void free_config(struct daemon_conf *config)
         free((void *)config->admin_space_left_exe);
         free((void *)config->disk_full_exe);
         free((void *)config->disk_error_exe);
+        free((void *)config->krb5_principal);
+        free((void *)config->krb5_key_file);
 }
 
 int resolve_node(struct daemon_conf *config)

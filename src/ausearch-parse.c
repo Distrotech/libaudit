@@ -211,7 +211,7 @@ int extract_search_items(llist *l)
 			   AUDIT_FIRST_KERN_ANOM_MSG...AUDIT_LAST_KERN_ANOM_MSG:
 				ret = parse_kernel_anom(n, s);
 				break;
-			case AUDIT_MAC_POLICY_LOAD...AUDIT_MAC_IPSEC_DELSPD:
+			case AUDIT_MAC_POLICY_LOAD...AUDIT_MAC_UNLBL_STCDEL:
 				ret = parse_simple_message(n, s);
 				break;
 			case AUDIT_KERNEL:
@@ -262,98 +262,107 @@ static int parse_syscall(lnode *n, search_items *s)
 	s->syscall = (int)strtoul(ptr, NULL, 10);
 	if (errno)
 		return 6;
-	// get success
 	*term = ' ';
-	str = strstr(term, "success=");
-	if (str) { // exit_group does not set success !?!
-		ptr = str + 8;
+	// get success
+	if (event_success != S_UNSET) {
+		str = strstr(term, "success=");
+		if (str) { // exit_group does not set success !?!
+			ptr = str + 8;
+			term = strchr(ptr, ' ');
+			if (term == NULL)
+				return 7;
+			*term = 0;
+			if (strcmp(ptr, "yes") == 0)
+				s->success = S_SUCCESS;
+			else
+				s->success = S_FAILED;
+			*term = ' ';
+		}
+	}
+	// get exit
+	if (event_exit_is_set) {
+		str = strstr(term, "exit=");
+		if (str == NULL)
+			return 8;
+		ptr = str + 5;
 		term = strchr(ptr, ' ');
 		if (term == NULL)
-			return 7;
+			return 9;
 		*term = 0;
-		if (strcmp(ptr, "yes") == 0)
-			s->success = S_SUCCESS;
-		else
-			s->success = S_FAILED;
+		errno = 0;
+		s->exit = strtoul(ptr, NULL, 0);
+		if (errno)
+			return 10;
+		s->exit_is_set = 1;
 		*term = ' ';
 	}
 	// get a0
 	str = strstr(term, "a0=");
 	if (str == NULL)
-		return 8;
+		return 11;
 	ptr = str + 3;
 	term = strchr(ptr, ' ');
 	if (term == NULL)
-		return 9;
+		return 12;
 	*term = 0;
 	errno = 0;
 	// 64 bit dump on 32 bit machine looks bad here - need long long
 	n->a0 = strtoull(ptr, NULL, 16); // Hex
 	if (errno)
-		return 10;
-	// ppid
+		return 13;
 	*term = ' ';
-	str = strstr(term, "ppid=");
-	if (str != NULL) { // ppid is an optional field
+	// ppid
+	if (event_ppid != -1) {
+		str = strstr(term, "ppid=");
+		if (str != NULL) { // ppid is an optional field
+			ptr = str + 5;
+			term = strchr(ptr, ' ');
+			if (term == NULL)
+				return 14;
+			*term = 0;
+			errno = 0;
+			s->ppid = strtoul(ptr, NULL, 10);
+			if (errno)
+				return 15;
+			*term = ' ';
+		}
+	}
+	// pid
+	if (event_pid != -1) {
+		str = strstr(term, " pid=");
+		if (str == NULL)
+			return 16;
 		ptr = str + 5;
 		term = strchr(ptr, ' ');
 		if (term == NULL)
-			return 11;
+			return 17;
 		*term = 0;
 		errno = 0;
-		s->ppid = strtoul(ptr, NULL, 10);
+		s->pid = strtoul(ptr, NULL, 10);
 		if (errno)
-			return 12;
+			return 18;
 		*term = ' ';
 	}
-	// pid
-	str = strstr(term, "pid=");
-	if (str == NULL)
-		return 13;
-	ptr = str + 4;
-	term = strchr(ptr, ' ');
-	if (term == NULL)
-		return 14;
-	*term = 0;
-	errno = 0;
-	s->pid = strtoul(ptr, NULL, 10);
-	if (errno)
-		return 15;
 	// loginuid
-	*term = ' ';
 	str = strstr(term, "auid=");
 	if (str == NULL) {
 		str = strstr(term, "loginuid=");
 		if (str == NULL)
-			return 16;
+			return 19;
 		ptr = str + 9;
 	} else
 		ptr = str + 5;
 	term = strchr(ptr, ' ');
 	if (term == NULL)
-		return 17;
+		return 20;
 	*term = 0;
 	errno = 0;
 	s->loginuid = strtoul(ptr, NULL, 10);
 	if (errno)
-		return 18;
+		return 21;
 	// uid
 	*term = ' ';
 	str = strstr(term, "uid=");
-	if (str == NULL)
-		return 19;
-	ptr = str + 4;
-	term = strchr(ptr, ' ');
-	if (term == NULL)
-		return 20;
-	*term = 0;
-	errno = 0;
-	s->uid = strtoul(ptr, NULL, 10);
-	if (errno)
-		return 21;
-	// gid
-	*term = ' ';
-	str = strstr(term, "gid=");
 	if (str == NULL)
 		return 22;
 	ptr = str + 4;
@@ -362,26 +371,26 @@ static int parse_syscall(lnode *n, search_items *s)
 		return 23;
 	*term = 0;
 	errno = 0;
-	s->gid = strtoul(ptr, NULL, 10);
+	s->uid = strtoul(ptr, NULL, 10);
 	if (errno)
 		return 24;
-	// euid
+	// gid
 	*term = ' ';
-	str = strstr(term, "euid=");
+	str = strstr(term, "gid=");
 	if (str == NULL)
 		return 25;
-	ptr = str + 5;
+	ptr = str + 4;
 	term = strchr(ptr, ' ');
 	if (term == NULL)
 		return 26;
 	*term = 0;
 	errno = 0;
-	s->euid = strtoul(ptr, NULL, 10);
+	s->gid = strtoul(ptr, NULL, 10);
 	if (errno)
 		return 27;
-	// egid
+	// euid
 	*term = ' ';
-	str = strstr(term, "egid=");
+	str = strstr(term, "euid=");
 	if (str == NULL)
 		return 28;
 	ptr = str + 5;
@@ -390,9 +399,23 @@ static int parse_syscall(lnode *n, search_items *s)
 		return 29;
 	*term = 0;
 	errno = 0;
-	s->egid = strtoul(ptr, NULL, 10);
+	s->euid = strtoul(ptr, NULL, 10);
 	if (errno)
 		return 30;
+	// egid
+	*term = ' ';
+	str = strstr(term, "egid=");
+	if (str == NULL)
+		return 31;
+	ptr = str + 5;
+	term = strchr(ptr, ' ');
+	if (term == NULL)
+		return 32;
+	*term = 0;
+	errno = 0;
+	s->egid = strtoul(ptr, NULL, 10);
+	if (errno)
+		return 33;
 	*term = ' ';
 
 	if (event_terminal) {
@@ -402,25 +425,27 @@ static int parse_syscall(lnode *n, search_items *s)
 			str += 4;
 			term = strchr(str, ' ');
 			if (term == NULL)
-				return 31;
+				return 34;
 			*term = 0;
 			s->terminal = strdup(str);
 			*term = ' ';
 		}
 	}
 	// ses
-	str = strstr(term, "ses=");
-	if (str) {
-		ptr = str + 4;
-		term = strchr(ptr, ' ');
-		if (term == NULL)
-			return 32;
-		*term = 0;
-		errno = 0;
-		s->session_id = strtoul(ptr, NULL, 10);
-		if (errno)
-			return 33;
-		*term = ' ';
+	if (event_session_id != -1 ) {
+		str = strstr(term, "ses=");
+		if (str) {
+			ptr = str + 4;
+			term = strchr(ptr, ' ');
+			if (term == NULL)
+				return 35;
+			*term = 0;
+			errno = 0;
+			s->session_id = strtoul(ptr, NULL, 10);
+			if (errno)
+				return 36;
+			*term = ' ';
+		}
 	}
 	if (event_comm) {
 		// dont do this search unless needed
@@ -434,14 +459,14 @@ static int parse_syscall(lnode *n, search_items *s)
 				str++;
 				term = strchr(str, '"');
 				if (term == NULL)
-					return 34;
+					return 37;
 				*term = 0;
 				s->comm = strdup(str);
 				*term = '"';
 			} else 
 				s->comm = unescape(str);
 		} else
-			return 35;
+			return 38;
 	}
 	if (event_exe) {
 		// dont do this search unless needed
@@ -452,14 +477,14 @@ static int parse_syscall(lnode *n, search_items *s)
 				str++;
 				term = strchr(str, '"');
 				if (term == NULL)
-					return 36;
+					return 39;
 				*term = 0;
 				s->exe = strdup(str);
 				*term = '"';
 			} else 
 				s->exe = unescape(str);
 		} else
-			return 37;
+			return 40;
 	}
 	if (event_subject) {
 		// scontext
@@ -468,7 +493,7 @@ static int parse_syscall(lnode *n, search_items *s)
 			str += 5;
 			term = strchr(str, ' ');
 			if (term == NULL)
-				return 38;
+				return 41;
 			*term = 0;
 			if (audit_avc_init(s) == 0) {
 				anode an;
@@ -478,7 +503,7 @@ static int parse_syscall(lnode *n, search_items *s)
 				alist_append(s->avc, &an);
 				*term = ' ';
 			} else
-				return 39;
+				return 42;
 		}
 	}
 	if (event_key) {
@@ -488,7 +513,7 @@ static int parse_syscall(lnode *n, search_items *s)
 				//create
 				s->key = malloc(sizeof(slist));
 				if (s->key == NULL)
-					return 40;
+					return 43;
 				slist_create(s->key);
 			}
 			str += 4;
@@ -496,7 +521,7 @@ static int parse_syscall(lnode *n, search_items *s)
 				str++;
 				term = strchr(str, '"');
 				if (term == NULL)
-					return 41;
+					return 44;
 				*term = 0;
 				if (s->key) {
 					// append
@@ -691,20 +716,24 @@ static int parse_user(const lnode *n, search_items *s)
 {
 	char *ptr, *str, *term, saved, *mptr;
 
+	term = n->message;
+
 	// get pid
-	str = strstr(n->message, "pid=");
-	if (str == NULL)
-		return 1;
-	ptr = str + 4;
-	term = strchr(ptr, ' ');
-	if (term == NULL)
-		return 2;
-	*term = 0;
-	errno = 0;
-	s->pid = strtoul(ptr, NULL, 10);
-	if (errno)
-		return 3;
-	*term = ' ';
+	if (event_pid != -1) {
+		str = strstr(term, "pid=");
+		if (str == NULL)
+			return 1;
+		ptr = str + 4;
+		term = strchr(ptr, ' ');
+		if (term == NULL)
+			return 2;
+		*term = 0;
+		errno = 0;
+		s->pid = strtoul(ptr, NULL, 10);
+		if (errno)
+			return 3;
+		*term = ' ';
+	}
 	// get uid
 	str = strstr(term, "uid=");
 	if (str == NULL)
@@ -791,14 +820,12 @@ static int parse_user(const lnode *n, search_items *s)
 				*term = saved;
 			} else { 
 				/* Handle legacy accts */
-				char *end = term;
+				char *end = ptr;
 				int legacy = 0;
 
 				while (*end != ' ') {
-					if (!isxdigit(*end)) {
+					if (!isxdigit(*end))
 						legacy = 1;
-						break;
-					}
 					end++;
 				}
 				term = end;
@@ -852,8 +879,11 @@ static int parse_user(const lnode *n, search_items *s)
 		if (str) {
 			str += 9;
 			term = strchr(str, ' ');
-			if (term == NULL)
-				return 17;
+			if (term == NULL) {
+				term = strchr(str, ')');
+				if (term == NULL)
+					return 17;
+			}
 			*term = 0;
 			s->terminal = strdup(str);
 			*term = ' ';
@@ -872,58 +902,80 @@ static int parse_user(const lnode *n, search_items *s)
 				*term = 0;
 				s->exe = strdup(str);
 				*term = '"';
-			} else 
-				s->exe = unescape(str);
+			} else {
+				char *end = str;
+				int legacy = 0;
+
+				while (*end != ' ') {
+					if (!isxdigit(*end)) {
+						legacy = 1;
+					}
+					end++;
+				}
+				term = end;
+				if (!legacy)
+					s->exe = unescape(str);
+				else {
+					saved = *term;
+					*term = 0;
+					s->exe = strdup(str);
+					*term = saved;
+				}
+			}
 		}
 	}
 	
 	// get success
-	str = strstr(mptr, "res=");
-	if (str) {
-		ptr = str + 4;
-		term = strchr(ptr, '\'');
-		if (term == NULL)
-			return 19;
-		*term = 0;
-		if (strncmp(ptr, "failed", 6) == 0)
-			s->success = S_FAILED;
-		else
-			s->success = S_SUCCESS;
-		*term = '\'';
-	} else if ((str = strstr(mptr, "result="))) {
-		ptr = str + 7;
-		term = strchr(ptr, ')');
-		if (term == NULL)
-			return 20;
-		*term = 0;
-		if (strcasecmp(ptr, "success") == 0)
-			s->success = S_SUCCESS;
-		else
-			s->success = S_FAILED;
-		*term = ')';
+	if (event_success != S_UNSET) {
+		str = strstr(mptr, "res=");
+		if (str) {
+			ptr = str + 4;
+			term = strchr(ptr, '\'');
+			if (term == NULL)
+				return 19;
+			*term = 0;
+			if (strncmp(ptr, "failed", 6) == 0)
+				s->success = S_FAILED;
+			else
+				s->success = S_SUCCESS;
+			*term = '\'';
+		} else if ((str = strstr(mptr, "result="))) {
+			ptr = str + 7;
+			term = strchr(ptr, ')');
+			if (term == NULL)
+				return 20;
+			*term = 0;
+			if (strcasecmp(ptr, "success") == 0)
+				s->success = S_SUCCESS;
+			else
+				s->success = S_FAILED;
+			*term = ')';
+		}
 	}
 	return 0;
 }
 
 static int parse_login(const lnode *n, search_items *s)
 {
-	char *ptr, *str, *term;
+	char *ptr, *str, *term = n->message;
 
 	// get pid
-	str = strstr(n->message, "pid=");
-	if (str == NULL)
-		return 1;
-	ptr = str + 4;
-	term = strchr(ptr, ' ');
-	if (term == NULL)
-		return 2;
-	*term = 0;
-	errno = 0;
-	s->pid = strtoul(ptr, NULL, 10);
-	if (errno)
-		return 3;
+	if (event_pid != -1) {
+		str = strstr(term, "pid=");
+		if (str == NULL)
+			return 1;
+		ptr = str + 4;
+		term = strchr(ptr, ' ');
+		if (term == NULL)
+			return 2;
+		*term = 0;
+		errno = 0;
+		s->pid = strtoul(ptr, NULL, 10);
+		if (errno)
+			return 3;
+		*term = ' ';
+	}
 	// get uid
-	*term = ' ';
 	str = strstr(term, "uid=");
 	if (str == NULL)
 		return 4;
@@ -957,21 +1009,22 @@ static int parse_login(const lnode *n, search_items *s)
 		*term = ' ';
 
 	// success
-	str = strstr(ptr, "res=");
-	if (str != NULL) {
-		ptr = str + 4;
-		term = strchr(ptr, ' ');
-		if (term)
-			*term = 0;
-		errno = 0;
-		s->success = strtoul(ptr, NULL, 10);
-		if (errno)
-			return 9;
-		if (term)
-			*term = ' ';
-	} else	// Assume older kernel where always successful
-		s->success = S_SUCCESS; 
-
+	if (event_success != S_UNSET) {
+		str = strstr(ptr, "res=");
+		if (str != NULL) {
+			ptr = str + 4;
+			term = strchr(ptr, ' ');
+			if (term)
+				*term = 0;
+			errno = 0;
+			s->success = strtoul(ptr, NULL, 10);
+			if (errno)
+				return 9;
+			if (term)
+				*term = ' ';
+		} else	// Assume older kernel where always successful
+			s->success = S_SUCCESS; 
+	}
 	return 0;
 }
 
@@ -1001,20 +1054,22 @@ static int parse_daemon(const lnode *n, search_items *s)
 	*term = saved;
 
 	// pid
-	str = strstr(term, "pid=");
-	if (str == NULL)
-		return 5;
-	ptr = str + 4;
-	term = strchr(ptr, ' ');
-	if (term == NULL) 
-		return 6;
-	saved = *term;
-	*term = 0;
-	errno = 0;
-	s->pid = strtoul(ptr, NULL, 10);
-	if (errno)
-		return 7;
-	*term = saved;
+	if (event_pid != -1) {
+		str = strstr(term, "pid=");
+		if (str == NULL)
+			return 5;
+		ptr = str + 4;
+		term = strchr(ptr, ' ');
+		if (term == NULL) 
+			return 6;
+		saved = *term;
+		*term = 0;
+		errno = 0;
+		s->pid = strtoul(ptr, NULL, 10);
+		if (errno)
+			return 7;
+		*term = saved;
+	}
 
 	if (event_subject) {
 		// scontext
@@ -1038,20 +1093,22 @@ static int parse_daemon(const lnode *n, search_items *s)
 	}
 
 	// success
-	str = strstr(mptr, "res=");
-	if (str) {
-		ptr = term = str + 4;
-		while (isalpha(*term))
-			term++;
-		if (term == ptr)
-			return 10;
-		saved = *term;
-		*term = 0;
-		if (strncmp(ptr, "failed", 6) == 0)
-			s->success = S_FAILED;
-		else
-			s->success = S_SUCCESS;
-		*term = saved;
+	if (event_success != S_UNSET) {
+		str = strstr(mptr, "res=");
+		if (str) {
+			ptr = term = str + 4;
+			while (isalpha(*term))
+				term++;
+			if (term == ptr)
+				return 10;
+			saved = *term;
+			*term = 0;
+			if (strncmp(ptr, "failed", 6) == 0)
+				s->success = S_FAILED;
+			else
+				s->success = S_SUCCESS;
+			*term = saved;
+		}
 	}
 
 	return 0;
@@ -1167,17 +1224,19 @@ static int parse_avc(const lnode *n, search_items *s)
 		term = strchr(str, '{');
 		if (term == NULL)
 			return 1;
-		*term = 0;
-		// FIXME. Do not override syscall pass/fail if its already
-		// set. Syscall pass/fail is the authoritative value.
-		if (strstr(str, "denied")) {
-			s->success = S_FAILED; 
-			an.avc_result = AVC_DENIED;
-		} else {
-			s->success = S_SUCCESS;
-			an.avc_result = AVC_GRANTED;
+		if (event_success != S_UNSET) {
+			*term = 0;
+			// FIXME. Do not override syscall success if already
+			// set. Syscall pass/fail is the authoritative value.
+			if (strstr(str, "denied")) {
+				s->success = S_FAILED; 
+				an.avc_result = AVC_DENIED;
+			} else {
+				s->success = S_SUCCESS;
+				an.avc_result = AVC_GRANTED;
+			}
+			*term = '{';
 		}
-		*term = '{';
 
 		// Now get permission
 		str = term + 1;
@@ -1193,11 +1252,28 @@ static int parse_avc(const lnode *n, search_items *s)
 		*term = ' ';
 	}
 
+	// get pid
+	if (event_pid != -1) {
+		str = strstr(term, "pid=");
+		if (str) {
+			str = str + 4;
+			term = strchr(str, ' ');
+			if (term == NULL)
+				return 3;
+			*term = 0;
+			errno = 0;
+			s->pid = strtoul(str, NULL, 10);
+			if (errno)
+				return 4;
+			*term = ' ';
+		}
+	}
+
 	if (event_comm && s->comm == NULL) {
 	// dont do this search unless needed
 		str = strstr(term, "comm=");
 		if (str == NULL) {
-			rc = 3;
+			rc = 5;
 			goto err;
 		}
 		str += 5;
@@ -1205,7 +1281,7 @@ static int parse_avc(const lnode *n, search_items *s)
 			str++;
 			term = strchr(str, '"');
 			if (term == NULL) {
-				rc = 4;
+				rc = 6;
 				goto err;
 			}
 			*term = 0;
@@ -1234,7 +1310,7 @@ static int parse_avc(const lnode *n, search_items *s)
 			str += 9;
 			term = strchr(str, ' ');
 			if (term == NULL) {
-				rc = 5;
+				rc = 7;
 				goto err;
 			}
 			*term = 0;
@@ -1250,7 +1326,7 @@ static int parse_avc(const lnode *n, search_items *s)
 			str += 9;
 			term = strchr(str, ' ');
 			if (term == NULL) {
-				rc = 6;
+				rc = 8;
 				goto err;
 			}
 			*term = 0;
@@ -1262,7 +1338,7 @@ static int parse_avc(const lnode *n, search_items *s)
 	// Now get the class...its at the end, so we do things different
 	str = strstr(term, "tclass=");
 	if (str == NULL) {
-		rc = 7;
+		rc = 9;
 		goto err;
 	}
 	str += 7;
@@ -1276,7 +1352,7 @@ static int parse_avc(const lnode *n, search_items *s)
 	if (audit_avc_init(s) == 0) {
 		alist_append(s->avc, &an);
 	} else {
-		rc = 8;
+		rc = 10;
 		goto err;
 	}
 
@@ -1359,18 +1435,20 @@ static int parse_kernel_anom(const lnode *n, search_items *s)
 	}
 
 	// get pid
-	str = strstr(term, "pid=");
-	if (str) {
-		ptr = str + 4;
-		term = strchr(ptr, ' ');
-		if (term == NULL)
-			return 9;
-		*term = 0;
-		errno = 0;
-		s->pid = strtoul(ptr, NULL, 10);
-		if (errno)
-			return 10;
-		*term = ' ';
+	if (event_pid != -1) {
+		str = strstr(term, "pid=");
+		if (str) {
+			ptr = str + 4;
+			term = strchr(ptr, ' ');
+			if (term == NULL)
+				return 9;
+			*term = 0;
+			errno = 0;
+			s->pid = strtoul(ptr, NULL, 10);
+			if (errno)
+				return 10;
+			*term = ' ';
+		}
 	}
 
 	if (event_comm) {
@@ -1398,24 +1476,26 @@ static int parse_kernel_anom(const lnode *n, search_items *s)
 // of interest.
 static int parse_simple_message(const lnode *n, search_items *s)
 {
-	char *str, *ptr, *term;
+	char *str, *ptr, *term  = n->message;
 
-	// get loginuid
-	str = strstr(n->message, "auid=");
-	if (str == NULL)
+	// get loginuid - note some kernels don't have auid for CONFIG_CHANGE
+	str = strstr(term, "auid=");
+	if (str == NULL && n->type != AUDIT_CONFIG_CHANGE)
 		return 1;
-	ptr = str + 5;
-	term = strchr(ptr, ' ');
-	if (term)
-		*term = 0;
-	errno = 0;
-	s->loginuid = strtoul(ptr, NULL, 10);
-	if (errno)
-		return 2;
-	if (term)
-		*term = ' ';
-	else
-		term = ptr;
+	if (str) {
+		ptr = str + 5;
+		term = strchr(ptr, ' ');
+		if (term)
+			*term = 0;
+		errno = 0;
+		s->loginuid = strtoul(ptr, NULL, 10);
+		if (errno)
+			return 2;
+		if (term)
+			*term = ' ';
+		else
+			term = ptr;
+	}
 
 	// Now get subj label
 	if (event_subject) {
@@ -1497,18 +1577,20 @@ static int parse_simple_message(const lnode *n, search_items *s)
 		s->success = S_SUCCESS;
 
 	// and results (usually last)
-	str = strstr(term, "res=");
-	if (str != NULL) {
-		ptr = str + 4;
-		term = strchr(ptr, ' ');
-		if (term)
-			*term = 0;
-		errno = 0;
-		s->success = strtoul(ptr, NULL, 10);
-		if (errno)
-			return 6;
-		if (term)
-			*term = ' ';
+	if (event_success != S_UNSET) {
+		str = strstr(term, "res=");
+		if (str != NULL) {
+			ptr = str + 4;
+			term = strchr(ptr, ' ');
+			if (term)
+				*term = 0;
+			errno = 0;
+			s->success = strtoul(ptr, NULL, 10);
+			if (errno)
+				return 6;
+			if (term)
+				*term = ' ';
+		}
 	}
 
 	return 0;

@@ -19,9 +19,7 @@
 #   Miloslav Trmač <mitr@redhat.com>
 #
 
-DISTCLEANFILES = Makefile.in
-
 check_PROGRAMS = lookup_test
 TESTS = $(check_PROGRAMS)
 
-lookup_test_LDADD = ../libaudit.la
+lookup_test_LDADD = ${top_builddir}/lib/libaudit.la

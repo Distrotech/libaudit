@@ -20,10 +20,10 @@
 #   Steve Grubb <sgrubb@redhat.com>
 # 
 
-CONFIG_CLEAN_FILES = Makefile.in *.loT *.rej *.orig
+CONFIG_CLEAN_FILES = *.loT *.rej *.orig
 AUTOMAKE_OPTIONS = no-dependencies
 EXTRA_DIST = $(man_MANS)
-INCLUDES = -I.. -I${top_srcdir}/auparse
+INCLUDES = -I${top_srcdir} -I${top_srcdir}/auparse
 LIBS = -L${top_builddir}/auparse -lauparse
 bin_PROGRAMS = aulastlog
 noinst_HEADERS = aulastlog-llist.h
