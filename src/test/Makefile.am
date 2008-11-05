@@ -1,4 +1,3 @@
-# Makefile.am --
 # Copyright 2008 Red Hat Inc., Durham, North Carolina.
 # All Rights Reserved.
 #
@@ -20,7 +19,7 @@
 #   Steve Grubb <sgrubb@redhat.com>
 #
 
-CONFIG_CLEAN_FILES = *.loT *.rej *.orig
-
-SUBDIRS = aulast aulastlog ausyscall
-
+INCLUDES = -I${top_srcdir} -I${top_srcdir}/lib -I${top_srcdir}/src
+check_PROGRAMS = ilist_test
+TESTS = $(check_PROGRAMS)
+ilist_test_LDADD = ${top_builddir}/src/ausearch-int.o
