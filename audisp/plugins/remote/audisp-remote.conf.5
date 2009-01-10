@@ -32,7 +32,7 @@ If set to
 .IR immediate ,
 the remote logging app will attempt to send events immediately after getting them.
 .I forward
-means that it will store the events to disk and then attempt to send the records. If the connection cannot be made, it will queue records until it can connection to the remote system. The depth of the queue is controlled by the
+, which is not implemented yet, means that it will store the events to disk and then attempt to send the records. If the connection cannot be made, it will queue records until it can connection to the remote system. The depth of the queue is controlled by the
 .I queue_depth
 option.
 .TP
@@ -74,6 +74,11 @@ should be set, as each try may take a long time to time out.  The
 default value is 5 seconds.  If too much time is used on a message,
 the network_failure_action action is performed.
 .TP
+.I heartbeat_timeout
+This parameter determines how often in seconds the client should send a heartbeat event to the remote server. This is used to let both the client and server know that each end is alive and has not terminated in a way that it did not shutdown the connection uncleanly. This value must be coordinated with the server's
+.I tcp_client_max_idle
+setting. The default value is 0 which disables sending a heartbeat.
+.TP
 .I network_failure_action
 This parameter tells the system what action to take whenever there is an error
 detected when sending audit events to the remote system. Valid values are
@@ -108,7 +113,9 @@ remote end signals a disk error.  The default is to log it to syslog.
 .TP
 .I remote_ending_action
 Likewise, this parameter tells the system what action to take if the
-remote end signals a disk error.  The default is to suspend logging.
+remote end signals a disk error. This action has one additional option,
+.I reconnect
+which tells the remote plugin to attempt to reconnect to the server upon receipt of the next audit record. If it is unsuccessful, the audit record could be lost. The default is to suspend logging.
 .TP
 .I generic_error_action
 Likewise, this parameter tells the system what action to take if the
@@ -168,7 +175,8 @@ maintain logging across a reboot.
 
 .SH "SEE ALSO"
 .BR audispd (8),
-.BR audisp-remote(8).
+.BR audisp-remote(8),
+.BR auditd.conf(5).
 .SH AUTHOR
 Steve Grubb
 

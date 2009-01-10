@@ -594,7 +594,7 @@ static void do_disk_error_action(const char * func, struct daemon_conf *config)
 	snprintf(text, sizeof(text), 
 	    "%s: Audit daemon detected an error writing an event to disk (%s)",
 		func, strerror(errno));
-	audit_msg(LOG_ALERT, text);
+	audit_msg(LOG_ALERT, "%s", text);
 
 	switch (config->disk_error_action)
 	{
@@ -707,6 +707,13 @@ static void rotate_logs(struct auditd_consumer_data *data,
 			do_disk_full_action(data->config);
 		} else
 			do_disk_error_action("rotate2", data->config);
+
+		/* At this point, we've failed to rotate the original log.
+		 * So, let's make the old log writable and try again next
+		 * time */
+		chmod(data->config->log_file, 
+			data->config->log_group ? S_IWUSR|S_IRUSR|S_IRGRP :
+			S_IWUSR|S_IRUSR);
 	}
 	free(newname);
 
@@ -920,7 +927,7 @@ static char *format_raw(const struct audit_reply *rep,
 	        	snprintf(format_buf, MAX_AUDIT_MESSAGE_LENGTH,
 				"type=DAEMON msg=NULL reply");
 	} else {
-		int len;
+		int len, nlen;
 		const char *type, *message;
 		char unknown[32];
 		type = audit_msg_type_to_name(rep->type);
@@ -940,18 +947,23 @@ static char *format_raw(const struct audit_reply *rep,
 		// Note: This can truncate messages if 
 		// MAX_AUDIT_MESSAGE_LENGTH is too small
 		if (config->node_name_format != N_NONE)
-			snprintf(format_buf, MAX_AUDIT_MESSAGE_LENGTH +
+			nlen = snprintf(format_buf, MAX_AUDIT_MESSAGE_LENGTH +
 				_POSIX_HOST_NAME_MAX - 32,
 				"node=%s type=%s msg=%.*s\n",
                                 config->node_name, type, len, message);
 		else
-		        snprintf(format_buf, MAX_AUDIT_MESSAGE_LENGTH - 32,
+		        nlen = snprintf(format_buf,
+				MAX_AUDIT_MESSAGE_LENGTH - 32,
 				"type=%s msg=%.*s", type, len, message);
 
 	        /* Replace \n with space so it looks nicer. */
         	ptr = format_buf;
 	        while ((ptr = strchr(ptr, 0x0A)) != NULL)
         	        *ptr = ' ';
+
+		/* Trim trailing space off since it wastes space */
+		if (format_buf[nlen-1] == ' ')
+			format_buf[nlen-1] = 0;
 	}
         return format_buf;
 }
@@ -972,7 +984,7 @@ static void reconfigure(struct auditd_consumer_data *data)
 	snprintf(txt, sizeof(txt),
 		"config change requested by pid=%d auid=%u subj=%s",
 		pid, uid, ctx);
-	audit_msg(LOG_NOTICE, txt);
+	audit_msg(LOG_NOTICE, "%s", txt);
 
 	/* Do the reconfiguring. These are done in a specific
 	 * order from least invasive to most invasive. We will
@@ -1238,7 +1250,7 @@ static void reconfigure(struct auditd_consumer_data *data)
 	data->head->reply.len = snprintf(txt, sizeof(txt), 
 		"%s config changed, auid=%u pid=%d subj=%s res=success", date, 
 		uid, pid, ctx );
-	audit_msg(LOG_NOTICE, txt);
+	audit_msg(LOG_NOTICE, "%s", txt);
 	data->head->reply.type = AUDIT_DAEMON_CONFIG;
 	data->head->reply.message = strdup(txt);
 	if (!data->head->reply.message) {

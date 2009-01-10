@@ -1,3 +1,15 @@
+1.7.11
+- Don't error out in auditd when calling setsid
+- Reformat a couple auditd error messages (Oden Eriksson)
+- If log rotate fails, leave the old log writable
+- Fixed bug in setting up auditd event loop when listening
+- Warn if on biarch machine and auditctl rules show a syscall mismatch
+- Audisp-remote was not parsing some config options correctly
+- In auparse, check for single key in addition to virtual keys
+- When auditd shuts down, send AUDIT_RMW_TYPE_ENDING messages to clients
+- Updated sample plugin code to use auparse
+- Created reconnect option to remote ending setting of audisp-remote
+
 1.7.10
 - Fix ausearch and aureport to handle out of order events
 - Add line-buffer option to ausearch & timeout pipe input (Tony Jones)
@@ -5,6 +17,15 @@
 - Add interpretations for epoll_ctl, lseek, and sigaction to libauparse
 - In audisp-remote, allow the keyword "any" for local_port
 - Man page updates
+- Don't consider 0x7F to be a printable character
+- Tighten parsing for -m and -w options in auditctl
+- Add session query hint for aulast proof
+- Fix audisp-remote to tolerate krb5 config options when not supported
+- Created new aureport option for tty keystroke report
+- audispd should detect backup config files and not use them
+- When checking for ack in netlink interface, retry on EAGAIN a few times
+- Trim a trailing whitespace from audit event written to disk
+- In aureport, fix mods report to show acct acted upon
 
 1.7.9
 - Fix uninitialized variable in aureport causing segfault

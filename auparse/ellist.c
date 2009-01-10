@@ -84,7 +84,7 @@ static char *escape(const char *tmp)
 	char *name;
 	const unsigned char *p = (unsigned char *)tmp;
 	while (*p) {
-		if (*p == '"' || *p < 0x21 || *p > 0x7f) {
+		if (*p == '"' || *p < 0x21 || *p > 0x7e) {
 			int len = strlen(tmp);
 			name = malloc((2*len)+1);
 			return _audit_c2x(name, tmp, len);
@@ -160,17 +160,23 @@ static int parse_up_record(rnode* r)
 			}
 			// Make virtual keys or just store it
 			if (strcmp(n.name, "key") == 0 && *n.val != '(') {
-				char *key = (char *)au_unescape(n.val);
-				char *ptr = strtok_r(key, key_sep, &saved);
-				free(n.name);
-				free(n.val);
-				while (ptr) {
-					n.name = strdup("key");
-					n.val = escape(ptr);
+				if (*n.val == '"')
 					nvlist_append(&r->nv, &n);
-					ptr = strtok_r(NULL, key_sep, &saved);
+				else {
+					char *key = (char *)au_unescape(n.val);
+					char *ptr = strtok_r(key,
+							key_sep, &saved);
+					free(n.name);
+					free(n.val);
+					while (ptr) {
+						n.name = strdup("key");
+						n.val = escape(ptr);
+						nvlist_append(&r->nv, &n);
+						ptr = strtok_r(NULL,
+							key_sep, &saved);
+					}
+					free(key);
 				}
-				free(key);
 				continue;
 			} else
 				nvlist_append(&r->nv, &n);

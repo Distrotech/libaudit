@@ -100,6 +100,18 @@ static void alarm_handler( int sig )
 	abort();
 }
 
+static int count_dots(const char *s)
+{
+	const char *ptr;
+	int cnt = 0;
+
+	while ((ptr = strchr(s, '.'))) {
+		cnt++;
+		s = ptr + 1;
+	}
+	return cnt;
+}
+
 static void load_plugin_conf(conf_llist *plugin)
 {
 	DIR *d;
@@ -116,7 +128,8 @@ static void load_plugin_conf(conf_llist *plugin)
 			plugin_conf_t config;
 			char fname[PATH_MAX];
 
-			if (e->d_name[0] == '.')
+			// Don't run backup files, hidden files, or dirs
+			if (e->d_name[0] == '.' || count_dots(e->d_name) > 1)
 				continue;
 
 			snprintf(fname, sizeof(fname), "%s%s",
@@ -651,6 +664,9 @@ static int event_loop(void)
 					conf->p->active = A_NO;
 					if (start_one_plugin(conf) == 0) {
 						rc = write_to_plugin(e, conf);
+						syslog(LOG_NOTICE,
+						"plugin %s was restarted",
+							conf->p->path);
 					} 
 				}
 			}
