@@ -1518,7 +1518,7 @@ static int audit_print_reply(struct audit_reply *rep)
 							audit_elf_to_machine(
 								audit_elf);
 						if (machine < 0)
-							ptr = 0;
+							ptr = NULL;
 						else
 							ptr = 
 							audit_syscall_to_name(i, 
