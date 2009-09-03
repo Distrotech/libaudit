@@ -10,6 +10,7 @@
 - Correct checking of != operator in audit_rule_fieldpair_data
 - Updated syscall table for 2.6.31 kernel
 - In auditd reset syslog warnings if disk space becomes available
+- Fix getloginuid for python bindings
 
 1.7.13
 - Disable libev asserts unless --with-debug passed to configure
