@@ -12,6 +12,7 @@
 - In auditd reset syslog warnings if disk space becomes available
 - Fix getloginuid for python bindings
 - In auditsp-remote plugin, timeout network reads (#514090)
+- Add audit.rules man page
 
 1.7.13
 - Disable libev asserts unless --with-debug passed to configure
