@@ -1,18 +1,19 @@
 Things that need to be done:
 ===========================
-2.0.1
-* Add definitions for kernel virt events
+2.0.2
+* audisp-prelude is preferring directories over files in the target sb both
 * Get store and forward working for remote logging app
 * Fix auparse to handle out of order messages
 * Fix SIGHUP for auditd network settings
 * If auparse input is a pipe timeout events by wall clock
-* Add libaudit.m4 to make audit easier to include
+* Add definitions for kernel virt events
 
 2.1
 * Look at gssapi support being done via dlopen()
 * Look at pulling audispd into auditd
 * auditctl needs to be able to take file names with spaces in rule files
 * Consider adding node/machine name to records going to rt interface in daemon    as protocol version 2.
+* Add libaudit.m4 to make audit easier to include
 * Update prelude detections to send anomaly events
 * Look at adding the direction read/write to file report (threat modelling)
 * Add basic responses to prelude plugin
@@ -41,7 +42,6 @@ Things that need to be done:
 
 2.3
 * Consolidate parsing code between libaudit and auditd-conf.c
-* Add mode where it ignores syscalls it can't resolve for arch
 * Look at variadic avc logging patch 
 * If relative file in cwd, need to build also (realpath). watch out for (null) and socket
 * Change ausearch to output name="" unless its a real null. (mount) ausearch-report.c, 523. FIXME

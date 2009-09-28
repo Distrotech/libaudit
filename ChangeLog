@@ -1,3 +1,14 @@
+2.0.1
+- Aulast now reads daemon_start events for the kernel version of reboot
+- Clarify the man pages for ausearch/report regarding locale and date formats
+- Fix getloginuid for python bindings
+- Disable the audispd af_unix plugin by default
+- Add a couple new init script actions for LSB 3.2
+- In audisp-remote plugin, timeout network reads (#514090)
+- Make some error logging in audisp-remote plugin more prominent
+- Add audit.rules man page
+- Interpret the session field in audit events
+
 2.0
 - Remove system-config-audit
 - Get rid of () from userspace originating events
