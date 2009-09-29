@@ -1,5 +1,5 @@
 /* libaudit.h -- 
- * Copyright 2004-2008 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2004-2009 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -27,7 +27,7 @@
 extern "C" {
 #endif
 
-
+#include <unistd.h>
 #include <asm/types.h>
 #include <stdint.h>
 #include <sys/socket.h>
