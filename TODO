@@ -1,6 +1,7 @@
 Things that need to be done:
 ===========================
 1.8
+* audisp-prelude is preferring directories over files in the target sb both
 * Get store and forward working for remote logging app
 * Look at gssapi support being done via dlopen()
 

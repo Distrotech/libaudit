@@ -1,4 +1,4 @@
-1.8
+1.7.14
 - In auditctl rules allow a0-a3 to be negative numbers
 - Add partial support for IMA integrity auditing
 - In s-c-audit, fix error handling with audit-1.7.12 and later
