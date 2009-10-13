@@ -37,6 +37,7 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #ifdef USE_GSSAPI
@@ -420,7 +421,7 @@ int main(int argc, char *argv[])
    are what we're interested in, but the network sees the tokens. The
    protocol we use for transferring tokens is to send the length first,
    four bytes MSB first, then the token data. We return nonzero on error. */
-static int recv_token (int s, gss_buffer_t tok)
+static int recv_token(int s, gss_buffer_t tok)
 {
 	int ret;
 	unsigned char lenbuf[4];
@@ -441,7 +442,11 @@ static int recv_token (int s, gss_buffer_t tok)
 		| ((uint32_t)(lenbuf[1] & 0xFF) << 16)
 		| ((uint32_t)(lenbuf[2] & 0xFF) << 8)
 		|  (uint32_t)(lenbuf[3] & 0xFF));
-
+	if (len > MAX_AUDIT_MESSAGE_LENGTH) {
+		syslog(LOG_ERR,
+			"GSS-API error: event length excedes MAX_AUDIT_LENGTH");
+		return -1;
+	}
 	tok->length = len;
 	tok->value = (char *) malloc(tok->length ? tok->length : 1);
 	if (tok->length && tok->value == NULL) {

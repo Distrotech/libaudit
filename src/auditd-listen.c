@@ -62,7 +62,7 @@ typedef struct ev_tcp {
 	struct ev_io io;
 	struct sockaddr_in addr;
 	struct ev_tcp *next, *prev;
-	int bufptr;
+	unsigned int bufptr;
 	int client_active;
 #ifdef USE_GSSAPI
 	/* This holds the negotiated security context for this client.  */
@@ -193,6 +193,11 @@ static int recv_token (int s, gss_buffer_t tok)
 	       | (lenbuf[1] << 16)
 	       | (lenbuf[2] << 8)
 	       | lenbuf[3]);
+	if (len > MAX_AUDIT_MESSAGE_LENGTH) {
+		audit_msg(LOG_ERR,
+			"GSS-API error: event length excedes MAX_AUDIT_LENGTH");
+		return -1;
+	}
 	tok->length = len;
 
 	tok->value = (char *) malloc(tok->length ? tok->length : 1);
@@ -592,7 +597,9 @@ more_messages:
 		       | ((uint32_t)(io->buffer[1] & 0xFF) << 16)
 		       | ((uint32_t)(io->buffer[2] & 0xFF) << 8)
 		       |  (uint32_t)(io->buffer[3] & 0xFF));
-		if (io->bufptr < 4 + len)
+
+		/* Make sure we got something big enough and not too big */
+		if (io->bufptr < 4 + len || len > MAX_AUDIT_MESSAGE_LENGTH)
 			return;
 		i = len + 4;
 
@@ -635,6 +642,10 @@ more_messages:
 
 		AUDIT_RMW_UNPACK_HEADER (header, hver, mver, type, len, seq);
 
+		/* Make sure len is not too big */
+		if (len > MAX_AUDIT_MESSAGE_LENGTH)
+			return;
+
 		i = len;
 		i += AUDIT_RMW_HEADER_SIZE;
 
@@ -642,7 +653,7 @@ more_messages:
 		if (io->bufptr < i)
 			return;
 		
-		/* We have an I-byte message in buffer.  */
+		/* We have an I-byte message in buffer. Send ACK */
 		client_message (io, i, io->buffer);
 
 	} else {
@@ -660,15 +671,15 @@ more_messages:
 		if (i == io->bufptr)
 			return;
 
-		i ++;
+		i++;
 
-		/* We have an I-byte message in buffer.  */
+		/* We have an I-byte message in buffer. Send ACK */
 		client_message (io, i, io->buffer);
 	}
 
 	/* Now copy any remaining bytes to the beginning of the
 	   buffer.  */
-	memmove (io->buffer, io->buffer + i, io->bufptr);
+	memmove(io->buffer, io->buffer + i, io->bufptr - i);
 	io->bufptr -= i;
 
 	/* See if this packet had more than one message in it. */
