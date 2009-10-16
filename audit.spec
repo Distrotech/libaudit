@@ -1,4 +1,4 @@
-%define audit_version 1.7.15
+%define audit_version 1.7.16
 %define audit_release 1
 %define sca_version 0.4.10
 %define sca_release 1
@@ -257,6 +257,6 @@ fi
 %config(noreplace) %{_sysconfdir}/security/console.apps/system-config-audit-server
 
 %changelog
-* Fri Oct 16 2009 Steve Grubb <sgrubb@redhat.com> 1.7.15-1
+* Fri Oct 16 2009 Steve Grubb <sgrubb@redhat.com> 1.7.16-1
 -New upstream release
 
