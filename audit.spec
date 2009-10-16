@@ -101,7 +101,7 @@ mkdir -p $RPM_BUILD_ROOT/%{_mandir}/{man5,man8}
 mkdir -p $RPM_BUILD_ROOT/%{_lib}
 mkdir -p $RPM_BUILD_ROOT/%{_libdir}/audit
 mkdir -p $RPM_BUILD_ROOT/%{_var}/log/audit
-make DESTDIR=$RPM_BUILD_ROOT %{?_smp_mflags} install
+make DESTDIR=$RPM_BUILD_ROOT install
 make -C system-config-audit DESTDIR=$RPM_BUILD_ROOT install-fedora
 
 mkdir -p $RPM_BUILD_ROOT/%{_libdir}
@@ -110,9 +110,9 @@ mv $RPM_BUILD_ROOT/%{_lib}/libaudit.a $RPM_BUILD_ROOT%{_libdir}
 mv $RPM_BUILD_ROOT/%{_lib}/libauparse.a $RPM_BUILD_ROOT%{_libdir}
 curdir=`pwd`
 cd $RPM_BUILD_ROOT/%{_libdir}
-LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libaudit.so.*.*.*\``
+LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libaudit.so.1.*.*\``
 ln -s ../../%{_lib}/$LIBNAME libaudit.so
-LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libauparse.so.*.*.*\``
+LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libauparse.so.0.*.*\``
 ln -s ../../%{_lib}/$LIBNAME libauparse.so
 cd $curdir
 # Remove these items so they don't get picked up.
@@ -163,7 +163,7 @@ fi
 
 %files libs
 %defattr(-,root,root)
-%attr(755,root,root) /%{_lib}/libaudit.*
+%attr(755,root,root) /%{_lib}/libaudit.so.1*
 %attr(755,root,root) /%{_lib}/libauparse.*
 %config(noreplace) %attr(640,root,root) /etc/libaudit.conf
 

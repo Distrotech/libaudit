@@ -1,4 +1,5 @@
 1.7.16
+- If audisp-remote plugin has a queue at exit, use non-zero exit code
 
 1.7.15
 - In audisp-remote, add a sigchld handler
