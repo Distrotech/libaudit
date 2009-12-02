@@ -1,6 +1,7 @@
 1.7.17
 - Add tcp_max_per_addr option in auditd.conf to limit concurrent connections
 - Make alpha processor support optional
+- Rearrange shutdown of auditd to allow DAEMON_END event more time
 
 1.7.16
 - If audisp-remote plugin has a queue at exit, use non-zero exit code
