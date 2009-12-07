@@ -1,6 +1,6 @@
 /*
 * interpret.c - Lookup values to something more readable
-* Copyright (c) 2007,08 Red Hat Inc., Durham, North Carolina.
+* Copyright (c) 2007-09 Red Hat Inc., Durham, North Carolina.
 * All Rights Reserved. 
 *
 * This software may be freely redistributed and/or modified under the
@@ -45,6 +45,7 @@
 #include <linux/x25.h>
 #include <linux/if.h>   // FIXME: remove when ipx.h is fixed
 #include <linux/ipx.h>
+#include <linux/capability.h>
 #include "auparse-defs.h"
 #include "gen_tables.h"
 
@@ -677,6 +678,41 @@ static const char *print_capabilities(const char *val)
 	return out;
 }
 
+static const char *print_cap_bitmap(const char *val)
+{
+#define MASK(x) (1U << (x))
+	unsigned long long temp;
+	__u32 caps[2];
+	int i, found=0;
+	char *p, buf[600]; // 17 per cap * 33
+
+	errno = 0;
+	temp = strtoull(val, NULL, 16);
+	if (errno) {
+		char *out;
+                asprintf(&out, "conversion error(%s)", val);
+                return out;
+	}
+
+        caps[0] = temp & 0xFFFFFFFF;
+        caps[1] = (temp & 0xFFFFFFFF) >> 32;
+	p = buf;
+	for (i=0; i <= CAP_LAST_CAP; i++) {
+		if (MASK(i%32) & caps[i/32]) {
+			const char *s;
+			if (found)
+				p = stpcpy(p, ",");
+			s = cap_i2s(i);
+			if (s != NULL)
+				p = stpcpy(p, s);
+			found = 1;
+		}
+	}
+	if (found == 0)
+		return strdup("none");
+	return strdup(buf);
+}
+
 static const char *print_success(const char *val)
 {
         int res;
@@ -1051,6 +1087,14 @@ static const char *print_tty_data(const char *raw_data)
 	return buf.buf;
 }
 
+static const char *print_session(const char *val)
+{
+	if (strcmp(val, "4294967295") == 0)
+		return strdup("unset");
+	else
+		return strdup(val);
+}
+
 int lookup_type(const char *name)
 {
 	int i;
@@ -1143,6 +1187,12 @@ const char *interpret(const rnode *r)
 			break;
 		case AUPARSE_TYPE_TTY_DATA:
 			out = print_tty_data(val);
+			break;
+		case AUPARSE_TYPE_SESSION:
+			out = print_session(val);
+			break;
+		case AUPARSE_TYPE_CAP_BITMAP:
+			out = print_cap_bitmap(val);
 			break;
 		case AUPARSE_TYPE_UNCLASSIFIED:
 		default: {

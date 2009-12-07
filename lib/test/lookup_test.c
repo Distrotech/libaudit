@@ -20,6 +20,7 @@
  *      Miloslav Trmač <mitr@redhat.com>
  */
 
+#include "config.h"
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -28,7 +29,8 @@
 
 #include "../libaudit.h"
 
-/* Number of lookups of random strings */
+/* Number of looku
+ * #include "config.h"ps of random strings */
 #define RAND_ITERATIONS 1000
 
 /* Maximum size of randomly generated strings, including the terminating NUL. */
@@ -116,6 +118,7 @@ gen_id(char *dest)
 		}							\
 	} while (0)
 
+#ifdef WITH_ALPHA
 static void
 test_alpha_table(void)
 {
@@ -131,6 +134,25 @@ test_alpha_table(void)
 #undef I2S
 #undef S2I
 }
+#endif
+
+#ifdef WITH_ARMEB
+static void
+test_armeb_table(void)
+{
+	static const struct entry t[] = {
+#include "../armeb_table.h"
+	};
+
+	printf("Testing armeb_table...\n");
+#define I2S(I) audit_syscall_to_name((I), MACH_ARMEB)
+#define S2I(S) audit_name_to_syscall((S), MACH_ARMEB)
+	TEST_I2S(0);
+	TEST_S2I(-1);
+#undef I2S
+#undef S2I
+}
+#endif
 
 static void
 test_i386_table(void)
@@ -342,7 +364,12 @@ test_optab(void)
 int
 main(void)
 {
+#ifdef WITH_ALPHA
 	test_alpha_table();
+#endif
+#ifdef WITH_ARMEB
+	test_armeb_table();
+#endif
 	test_i386_table();
 	test_ia64_table();
 	test_ppc_table();

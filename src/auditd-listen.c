@@ -62,7 +62,7 @@ typedef struct ev_tcp {
 	struct ev_io io;
 	struct sockaddr_in addr;
 	struct ev_tcp *next, *prev;
-	int bufptr;
+	unsigned int bufptr;
 	int client_active;
 #ifdef USE_GSSAPI
 	/* This holds the negotiated security context for this client.  */
@@ -75,7 +75,7 @@ typedef struct ev_tcp {
 
 static int listen_socket;
 static struct ev_io tcp_listen_watcher;
-static int min_port, max_port;
+static int min_port, max_port, max_per_addr;
 static int use_libwrap = 1;
 #ifdef USE_GSSAPI
 /* This is used to hold our own private key.  */
@@ -193,6 +193,11 @@ static int recv_token (int s, gss_buffer_t tok)
 	       | (lenbuf[1] << 16)
 	       | (lenbuf[2] << 8)
 	       | lenbuf[3]);
+	if (len > MAX_AUDIT_MESSAGE_LENGTH) {
+		audit_msg(LOG_ERR,
+			"GSS-API error: event length excedes MAX_AUDIT_LENGTH");
+		return -1;
+	}
 	tok->length = len;
 
 	tok->value = (char *) malloc(tok->length ? tok->length : 1);
@@ -483,6 +488,7 @@ static void client_ack (void *ack_data, const unsigned char *header,
 		return;
 	}
 #endif
+	// Send the header and a text error message if it exists
 	ar_write (io->io.fd, header, AUDIT_RMW_HEADER_SIZE);
 	if (msg[0])
 		ar_write (io->io.fd, msg, strlen(msg));
@@ -591,7 +597,9 @@ more_messages:
 		       | ((uint32_t)(io->buffer[1] & 0xFF) << 16)
 		       | ((uint32_t)(io->buffer[2] & 0xFF) << 8)
 		       |  (uint32_t)(io->buffer[3] & 0xFF));
-		if (io->bufptr < 4 + len)
+
+		/* Make sure we got something big enough and not too big */
+		if (io->bufptr < 4 + len || len > MAX_AUDIT_MESSAGE_LENGTH)
 			return;
 		i = len + 4;
 
@@ -634,6 +642,10 @@ more_messages:
 
 		AUDIT_RMW_UNPACK_HEADER (header, hver, mver, type, len, seq);
 
+		/* Make sure len is not too big */
+		if (len > MAX_AUDIT_MESSAGE_LENGTH)
+			return;
+
 		i = len;
 		i += AUDIT_RMW_HEADER_SIZE;
 
@@ -641,7 +653,7 @@ more_messages:
 		if (io->bufptr < i)
 			return;
 		
-		/* We have an I-byte message in buffer.  */
+		/* We have an I-byte message in buffer. Send ACK */
 		client_message (io, i, io->buffer);
 
 	} else {
@@ -659,15 +671,15 @@ more_messages:
 		if (i == io->bufptr)
 			return;
 
-		i ++;
+		i++;
 
-		/* We have an I-byte message in buffer.  */
+		/* We have an I-byte message in buffer. Send ACK */
 		client_message (io, i, io->buffer);
 	}
 
 	/* Now copy any remaining bytes to the beginning of the
 	   buffer.  */
-	memmove (io->buffer, io->buffer + i, io->bufptr);
+	memmove(io->buffer, io->buffer + i, io->bufptr - i);
 	io->bufptr -= i;
 
 	/* See if this packet had more than one message in it. */
@@ -697,6 +709,28 @@ static int auditd_tcpd_check(int sock)
 }
 #endif
 
+/*
+ * This function counts the number of concurrent connections and returns
+ * a 1 if there are too many and a 0 otherwise. It assumes the incoming
+ * connection has not been added to the linked list yet.
+ */
+static int check_num_connections(struct sockaddr_in *aaddr)
+{
+	int num = 0;
+	struct ev_tcp *client = client_chain;
+
+	while (client) {
+		if (memcmp(&aaddr->sin_addr, &client->addr.sin_addr, 
+					sizeof(struct in_addr)) == 0) {
+			num++;
+			if (num > max_per_addr)
+				return 1;
+		}
+		client = client->next;
+	}
+	return 0;
+}
+
 static void auditd_tcp_listen_handler( struct ev_loop *loop,
 	struct ev_io *_io, int revents )
 {
@@ -705,7 +739,6 @@ static void auditd_tcp_listen_handler( struct ev_loop *loop,
 	socklen_t aaddrlen;
 	struct sockaddr_in aaddr;
 	struct ev_tcp *client;
-	unsigned char *uaddr;
 	char emsg[DEFAULT_BUF_SZ];
 
 	/* Accept the connection and see where it's coming from.  */
@@ -722,39 +755,55 @@ static void auditd_tcp_listen_handler( struct ev_loop *loop,
 	        	audit_msg(LOG_ERR, "TCP connection from %s rejected",
 					sockaddr_to_ip (&aaddr));
 			snprintf(emsg, sizeof(emsg),
-				"addr=%s port=%d res=no",
+				"op=wrap addr=%s port=%d res=no",
 				sockaddr_to_ip (&aaddr),
 				ntohs (aaddr.sin_port));
 			send_audit_event(AUDIT_DAEMON_ACCEPT, emsg);
 			return;
 		}
 	}
-	uaddr = (unsigned char *)&aaddr.sin_addr;
 
 	/* Verify it's coming from an authorized port.  We assume the firewall
-	 *  will block attempts from unauthorized machines.  */
+	 * will block attempts from unauthorized machines.  */
 	if (min_port > ntohs (aaddr.sin_port) ||
 					ntohs (aaddr.sin_port) > max_port) {
         	audit_msg(LOG_ERR, "TCP connection from %s rejected",
 				sockaddr_to_ip (&aaddr));
 		snprintf(emsg, sizeof(emsg),
-			"addr=%s port=%d res=no", sockaddr_to_ip (&aaddr),
+			"op=port addr=%s port=%d res=no",
+			sockaddr_to_ip (&aaddr),
 			ntohs (aaddr.sin_port));
 		send_audit_event(AUDIT_DAEMON_ACCEPT, emsg);
 		close (afd);
 		return;
 	}
 
+	/* Make sure we don't have too many connections */
+	if (check_num_connections(&aaddr)) {
+        	audit_msg(LOG_ERR, "Too many connections from %s - rejected",
+				sockaddr_to_ip (&aaddr));
+		snprintf(emsg, sizeof(emsg),
+			"op=dup addr=%s port=%d res=no",
+			sockaddr_to_ip (&aaddr),
+			ntohs (aaddr.sin_port));
+		send_audit_event(AUDIT_DAEMON_ACCEPT, emsg);
+		close (afd);
+		return;
+	}
+
+	/* Connection is accepted...start setting it up */
 	setsockopt(afd, SOL_SOCKET, SO_REUSEADDR, (char *)&one, sizeof (int));
 	setsockopt(afd, SOL_SOCKET, SO_KEEPALIVE, (char *)&one, sizeof (int));
 	setsockopt(afd, IPPROTO_TCP, TCP_NODELAY, (char *)&one, sizeof (int));
 	set_close_on_exec (afd);
 
+	/* Make the client data structure */
 	client = (struct ev_tcp *) malloc (sizeof (struct ev_tcp));
 	if (client == NULL) {
         	audit_msg(LOG_CRIT, "Unable to allocate TCP client data");
 		snprintf(emsg, sizeof(emsg),
-			"addr=%s port=%d res=no", sockaddr_to_ip (&aaddr),
+			"op=alloc addr=%s port=%d res=no",
+			sockaddr_to_ip (&aaddr),
 			ntohs (aaddr.sin_port));
 		send_audit_event(AUDIT_DAEMON_ACCEPT, emsg);
 		close (afd);
@@ -762,7 +811,6 @@ static void auditd_tcp_listen_handler( struct ev_loop *loop,
 	}
 
 	memset (client, 0, sizeof (struct ev_tcp));
-
 	client->client_active = 1;
 
 	// Was watching for EV_ERROR, but libev 3.48 took it away
@@ -781,21 +829,24 @@ static void auditd_tcp_listen_handler( struct ev_loop *loop,
 	fcntl(afd, F_SETFL, O_NONBLOCK | O_NDELAY);
 	ev_io_start (loop, &(client->io));
 
-	/* Keep a linked list of active clients.  */
+	/* Add the new connection to a linked list of active clients.  */
 	client->next = client_chain;
 	if (client->next)
 		client->next->prev = client;
 	client_chain = client;
+
+	/* And finally log that we accepted the connection */
 	snprintf(emsg, sizeof(emsg),
 		"addr=%s port=%d res=success", sockaddr_to_ip (&aaddr),
 		ntohs (aaddr.sin_port));
-	send_audit_event(AUDIT_DAEMON_ACCEPT,emsg);
+	send_audit_event(AUDIT_DAEMON_ACCEPT, emsg);
 }
 
-void auditd_set_ports(int minp, int maxp)
+void auditd_set_ports(int minp, int maxp, int max_p_addr)
 {
 	min_port = minp;
 	max_port = maxp;
+	max_per_addr = max_p_addr;
 }
 
 int auditd_tcp_listen_init ( struct ev_loop *loop, struct daemon_conf *config )
@@ -845,10 +896,9 @@ int auditd_tcp_listen_init ( struct ev_loop *loop, struct daemon_conf *config )
 	ev_io_start (loop, &tcp_listen_watcher);
 
 	use_libwrap = config->use_libwrap;
-	min_port = config->tcp_client_min_port;
-	max_port = config->tcp_client_max_port;
 	auditd_set_ports(config->tcp_client_min_port,
-			config->tcp_client_max_port);
+			config->tcp_client_max_port,
+			config->tcp_max_per_addr);
 
 #ifdef USE_GSSAPI
 	if (config->enable_krb5) {
@@ -910,6 +960,7 @@ void auditd_tcp_listen_uninit ( struct ev_loop *loop )
 
 		AUDIT_RMW_PACK_HEADER (ack, 0, AUDIT_RMW_TYPE_ENDING, 0, 0);
 		client_ack (client_chain, ack, "");
+		ev_io_stop (loop, &client_chain->io);
 		close_client (client_chain);
 	}
 }
@@ -925,7 +976,10 @@ void auditd_tcp_listen_check_idle (struct ev_loop *loop )
 		if (active)
 			continue;
 
-		fprintf (stderr, "client %s idle too long\n",
+		audit_msg(LOG_NOTICE,
+			"client %s idle too long - closing connection\n",
 			sockaddr_to_ip (&(ev->addr)));
+		ev_io_stop (loop, &ev->io);
+		close_client(ev);
 	}
 }

@@ -34,8 +34,10 @@
 #include <time.h>
 #include <fcntl.h>
 #include <sys/select.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #ifdef USE_GSSAPI
@@ -122,6 +124,14 @@ static void user2_handler( int sig )
 }
 
 /*
+ * SIGCHLD handler: reap exiting processes
+ */
+static void child_handler(int sig)
+{
+	while (waitpid(-1, NULL, WNOHANG) > 0)
+		; /* empty */
+}
+/*
  * Handlers for various events coming back from the remote server.
  * Return -1 if the remote dispatcher should exit.
  */
@@ -133,8 +143,7 @@ static int sync_error_handler (const char *why)
 	   be losing) sync.  Sync errors are transient - if a retry
 	   doesn't fix it, we eventually call network_failure_handler
 	   which has all the user-tweakable actions.  */
-	if (config.network_failure_action == FA_SYSLOG)
-		syslog (LOG_ERR, "lost/losing sync, %s", why);
+	syslog (LOG_ERR, "lost/losing sync, %s", why);
 	return 0;
 }
 
@@ -293,7 +302,7 @@ int main(int argc, char *argv[])
 {
 	event_t *e;
 	struct sigaction sa;
-	int rc;
+	int rc, q_len;
 
 	/* Register sighandlers */
 	sa.sa_flags = 0;
@@ -305,6 +314,8 @@ int main(int argc, char *argv[])
 	sigaction(SIGHUP, &sa, NULL);
 	sa.sa_handler = user2_handler;
 	sigaction(SIGUSR2, &sa, NULL);
+	sa.sa_handler = child_handler;
+	sigaction(SIGCHLD, &sa, NULL);
 	if (load_config(&config, CONFIG_FILE))
 		return 6;
 
@@ -404,11 +415,12 @@ int main(int argc, char *argv[])
 	} while (stop == 0);
 	close(sock);
 	free_config(&config);
+	q_len = queue_length();
 	destroy_queue();
 	if (stop)
 		syslog(LOG_NOTICE, "audisp-remote is exiting on stop request");
 
-	return 0;
+	return q_len ? 1 : 0;
 }
 
 #ifdef USE_GSSAPI
@@ -418,7 +430,7 @@ int main(int argc, char *argv[])
    are what we're interested in, but the network sees the tokens. The
    protocol we use for transferring tokens is to send the length first,
    four bytes MSB first, then the token data. We return nonzero on error. */
-static int recv_token (int s, gss_buffer_t tok)
+static int recv_token(int s, gss_buffer_t tok)
 {
 	int ret;
 	unsigned char lenbuf[4];
@@ -440,10 +452,15 @@ static int recv_token (int s, gss_buffer_t tok)
 		| ((uint32_t)(lenbuf[2] & 0xFF) << 8)
 		|  (uint32_t)(lenbuf[3] & 0xFF));
 
+	if (len > MAX_AUDIT_MESSAGE_LENGTH) {
+		syslog(LOG_ERR,
+			"GSS-API error: event length excedes MAX_AUDIT_LENGTH");
+		return -1;
+	}
 	tok->length = len;
 	tok->value = (char *) malloc(tok->length ? tok->length : 1);
 	if (tok->length && tok->value == NULL) {
-		syslog(LOG_ERR, "Out of memory allocating token data %d %x",
+		syslog(LOG_ERR, "Out of memory allocating token data %zd %zx",
 				tok->length, tok->length);
 		return -1;
 	}
@@ -910,9 +927,17 @@ static int ar_write (int sk, const void *buf, int len)
 
 static int ar_read (int sk, void *buf, int len)
 {
-	int rc = 0, r;
+	int rc = 0, r, timeout = config.max_time_per_record * 1000;
+	struct pollfd pfd;
+
+	pfd.fd=sk;
+	pfd.events=POLLIN | POLLPRI | POLLHUP | POLLERR | POLLNVAL;
 	while (len > 0) {
 		do {
+			// reads can hang if cable is disconnected
+			int prc = poll(&pfd, (nfds_t) 1, timeout);
+			if (prc <= 0)
+				return -1;
 			r = read(sk, buf, len);
 		} while (r < 0 && errno == EINTR);
 		if (r < 0) {
@@ -1040,19 +1065,15 @@ static int send_msg_tcp (unsigned char *header, const char *msg, uint32_t mlen)
 
 	rc = ar_write(sock, header, AUDIT_RMW_HEADER_SIZE);
 	if (rc <= 0) {
-		if (config.network_failure_action == FA_SYSLOG)
-			syslog(LOG_ERR, "connection to %s closed unexpectedly",
-			       config.remote_server);
+		syslog(LOG_ERR, "send to %s failed", config.remote_server);
 		return 1;
 	}
 
 	if (msg != NULL && mlen > 0) {
 		rc = ar_write(sock, msg, mlen);
 		if (rc <= 0) {
-			if (config.network_failure_action == FA_SYSLOG)
-				syslog(LOG_ERR,
-				       "connection to %s closed unexpectedly",
-				       config.remote_server);
+			syslog(LOG_ERR, "send to %s failed",
+				config.remote_server);
 			return 1;
 		}
 	}
@@ -1066,9 +1087,7 @@ static int recv_msg_tcp (unsigned char *header, char *msg, uint32_t *mlen)
 
 	rc = ar_read (sock, header, AUDIT_RMW_HEADER_SIZE);
 	if (rc < 16) {
-		if (config.network_failure_action == FA_SYSLOG)
-			syslog(LOG_ERR, "connection to %s closed unexpectedly",
-			       config.remote_server);
+		syslog(LOG_ERR, "read from %s failed", config.remote_server);
 		return -1;
 	}
 
