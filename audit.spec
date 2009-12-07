@@ -257,6 +257,6 @@ fi
 %config(noreplace) %{_sysconfdir}/security/console.apps/system-config-audit-server
 
 %changelog
-* Sat Oct 17 2009 Steve Grubb <sgrubb@redhat.com> 1.7.17-1
+* Mon Dec 07 2009 Steve Grubb <sgrubb@redhat.com> 1.7.17-1
 -New upstream release
 
