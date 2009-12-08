@@ -1,3 +1,5 @@
+1.7.18
+
 1.7.17
 - Add tcp_max_per_addr option in auditd.conf to limit concurrent connections
 - Make alpha processor support optional
