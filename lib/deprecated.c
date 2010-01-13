@@ -466,7 +466,12 @@ int audit_rule_fieldpair(struct audit_rule *rule, const char *pair, int flags)
 			if (!isdigit((char)*(v)))
 				return -21;
 
-			rule->values[rule->field_count] = strtol(v, NULL, 0);
+			if (field == AUDIT_INODE) 
+				rule->values[rule->field_count] =
+						strtoul(v, NULL, 0);
+			else
+				rule->values[rule->field_count] =
+						strtol(v, NULL, 0);
 			break;
 	}
 	++rule->field_count;
