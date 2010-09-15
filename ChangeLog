@@ -3,6 +3,7 @@
 - Make auparse handle empty AUSOURCE_FILE_ARRAY correctly (Miloslav Trmač)
 - On i386, audit rules do not work on inode's with a large number (#554553)
 - Fix handling of ignore errors in auditctl
+- Add virtualization event types
 
 1.7.17
 - Add tcp_max_per_addr option in auditd.conf to limit concurrent connections
