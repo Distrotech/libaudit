@@ -5,6 +5,7 @@
 - Fix handling of ignore errors in auditctl
 - Add virtualization event types
 - Update aureport program help and man pages to show all options
+- Fix displaying of inode values to be unsigned integers when listing rules
 
 1.7.17
 - Add tcp_max_per_addr option in auditd.conf to limit concurrent connections
