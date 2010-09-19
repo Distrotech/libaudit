@@ -1,3 +1,5 @@
+1.7.19
+
 1.7.18
 - Update time examples in ausearch/report man pages
 - Make auparse handle empty AUSOURCE_FILE_ARRAY correctly (Miloslav Trmač)
