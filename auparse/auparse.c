@@ -1,5 +1,5 @@
 /* auparse.c --
- * Copyright 2006-08 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2006-08,2010 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -180,7 +180,7 @@ auparse_state_t *auparse_init(ausource_t source, const void *b)
 			break;
 		case AUSOURCE_DESCRIPTOR:
 			n = (long)b;
-			au->in = fdopen(n, "r");
+			au->in = fdopen(n, "rm");
 			break;
 		case AUSOURCE_FILE_POINTER:
 			au->in = (FILE *)b;
@@ -810,7 +810,7 @@ static int retrieve_next_line(auparse_state_t *au)
 				}
 				au->line_number = 0;
 				au->in = fopen(au->source_list[au->list_idx],
-									"r");
+									"rm");
 				if (au->in == NULL)
 					return -1;
 				__fsetlocking(au->in, FSETLOCKING_BYCALLER);
@@ -828,7 +828,7 @@ static int retrieve_next_line(auparse_state_t *au)
 					if (au->source_list[au->list_idx]) {
 						au->in = fopen(
 						  au->source_list[au->list_idx],
-						  "r");
+						  "rm");
 						if (au->in == NULL)
 							return -1;
 						__fsetlocking(au->in,

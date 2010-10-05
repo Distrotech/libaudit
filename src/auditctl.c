@@ -1037,7 +1037,7 @@ static int fileopt(const char *file)
 		return 1;
 	}
 
-        f = fdopen(tfd, "r");
+        f = fdopen(tfd, "rm");
         if (f == NULL) {
                 fprintf(stderr, "Error - fdopen failed (%s)\n",
                         strerror(errno));

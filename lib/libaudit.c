@@ -1,5 +1,5 @@
 /* libaudit.c -- 
- * Copyright 2004-2007 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2004-2007,2010 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -34,6 +34,7 @@
 #include <errno.h>
 #include <sys/poll.h>
 #include <sys/utsname.h>
+#include <sys/stat.h>
 #include <fcntl.h>	/* O_NOFOLLOW needs gnu defined */
 #include <limits.h>	/* for PATH_MAX */
 

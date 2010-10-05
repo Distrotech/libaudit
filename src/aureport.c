@@ -1,6 +1,6 @@
 /*
  * aureport.c - main file for aureport utility 
- * Copyright 2005-08 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2005-08,2010 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -255,7 +255,7 @@ static int process_stdin(void)
 
 static int process_file(char *filename)
 {
-	log_fd = fopen(filename, "r");
+	log_fd = fopen(filename, "rm");
 	if (log_fd == NULL) {
 		fprintf(stderr, "Error opening %s (%s)\n", filename, 
 			strerror(errno));
