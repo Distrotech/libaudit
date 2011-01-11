@@ -1607,7 +1607,7 @@ int resolve_node(struct daemon_conf *config)
 				if (rc2 != 0) {
 					audit_msg(LOG_ERR,
 					"Cannot resolve hostname %s (%s)",
-					tmp_name, gai_strerror(rc));
+					tmp_name, gai_strerror(rc2));
 					rc = -1;
 					break;
 				}
