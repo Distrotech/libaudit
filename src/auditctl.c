@@ -1129,7 +1129,7 @@ int main(int argc, char *argv[])
 		if (audit_is_enabled(fd) == 2) {
 			fprintf(stderr,
 				"The audit system is in immutable "
-				"mode, no rules loaded\n");
+				"mode, no rule changes allowed\n");
 			return 0;
 		} else if (errno == ECONNREFUSED) {
 			fprintf(stderr, "The audit system is disabled\n");
@@ -1151,7 +1151,7 @@ int main(int argc, char *argv[])
 		if (audit_is_enabled(fd) == 2) {
 			fprintf(stderr,
 				"The audit system is in immutable "
-				"mode, no rules loaded\n");
+				"mode, no rule changes allowed\n");
 			return 0;
 		} else if (errno == ECONNREFUSED) {
 			fprintf(stderr, "The audit system is disabled\n");
