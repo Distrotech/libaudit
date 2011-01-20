@@ -110,9 +110,9 @@ mv $RPM_BUILD_ROOT/%{_lib}/libaudit.a $RPM_BUILD_ROOT%{_libdir}
 mv $RPM_BUILD_ROOT/%{_lib}/libauparse.a $RPM_BUILD_ROOT%{_libdir}
 curdir=`pwd`
 cd $RPM_BUILD_ROOT/%{_libdir}
-LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libaudit.so.1.*.*\``
+LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libaudit.so.*.*.*\``
 ln -s ../../%{_lib}/$LIBNAME libaudit.so
-LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libauparse.so.0.*.*\``
+LIBNAME=`basename \`ls $RPM_BUILD_ROOT/%{_lib}/libauparse.so.*.*.*\``
 ln -s ../../%{_lib}/$LIBNAME libauparse.so
 cd $curdir
 # Remove these items so they don't get picked up.
