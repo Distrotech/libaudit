@@ -1,6 +1,6 @@
 /*
 * ausearch-parse.c - Extract interesting fields and check for match
-* Copyright (c) 2005-08 Red Hat Inc., Durham, North Carolina.
+* Copyright (c) 2005-08, 2011 Red Hat Inc., Durham, North Carolina.
 * All Rights Reserved. 
 *
 * This software may be freely redistributed and/or modified under the
@@ -344,7 +344,7 @@ static int parse_syscall(lnode *n, search_items *s)
 		}
 	}
 	// ses
-	if (event_session_id != -1 ) {
+	if (event_session_id != -2 ) {
 		str = strstr(term, "ses=");
 		if (str) {
 			ptr = str + 4;
@@ -680,7 +680,7 @@ static int parse_user(const lnode *n, search_items *s)
 		return 9;
 	*term = ' ';
 	// ses
-	if (event_session_id != -1 ) {
+	if (event_session_id != -2 ) {
 		str = strstr(term, "ses=");
 		if (str) {
 			ptr = str + 4;
@@ -955,7 +955,7 @@ static int parse_login(const lnode *n, search_items *s)
 			s->success = S_SUCCESS; 
 	}
 	// ses
-	if (event_session_id != -1 ) {
+	if (event_session_id != -2 ) {
 		str = strstr(term, "new ses=");
 		if (str) {
 			ptr = str + 8;
@@ -1443,7 +1443,7 @@ static int parse_simple_message(const lnode *n, search_items *s)
 	}
 
 	// ses
-	if (event_session_id != -1 ) {
+	if (event_session_id != -2 ) {
 		str = strstr(term, "ses=");
 		if (str) {
 			ptr = str + 4;
@@ -1610,7 +1610,7 @@ static int parse_tty(const lnode *n, search_items *s)
 		*term = ' ';
 
 	// ses
-	if (event_session_id != -1 ) {
+	if (event_session_id != -2 ) {
 		str = strstr(term, "ses=");
 		if (str) {
 			ptr = str + 4;

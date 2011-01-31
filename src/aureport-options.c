@@ -50,7 +50,7 @@ const char *event_terminal = NULL;
 const char *event_subject = NULL;
 const char *event_object = NULL;
 int event_exit = 0, event_exit_is_set = 0;
-int event_ppid = -1, event_session_id = -1;
+int event_ppid = -1, event_session_id = -2;
 
 /* These are used by aureport */
 const char *dummy = "dummy";
