@@ -221,6 +221,7 @@ static int process_log_fd(const char *filename)
 				found = 1;
 		}
 		list_clear(entries);
+		free(entries);
 	} while (ret == 0);
 	fclose(log_fd);
 	// This is the per file action items
