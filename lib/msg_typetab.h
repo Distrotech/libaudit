@@ -1,5 +1,5 @@
 /* msg_typetab.h --
- * Copyright 2005-07 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2005-07,2009-11 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -71,6 +71,8 @@ _S(AUDIT_GRP_AUTH,                   "GRP_AUTH"                      )
 _S(AUDIT_SYSTEM_BOOT,                "SYSTEM_BOOT"                   )
 _S(AUDIT_SYSTEM_SHUTDOWN,            "SYSTEM_SHUTDOWN"               )
 _S(AUDIT_SYSTEM_RUNLEVEL,            "SYSTEM_RUNLEVEL"               )
+_S(AUDIT_SERVICE_START,              "SERVICE_START"                 )
+_S(AUDIT_SERVICE_STOP,               "SERVICE_STOP"                  )
 _S(AUDIT_DAEMON_START,               "DAEMON_START"                  )
 _S(AUDIT_DAEMON_END,                 "DAEMON_END"                    )
 _S(AUDIT_DAEMON_ABORT,               "DAEMON_ABORT"                  )
@@ -102,6 +104,9 @@ _S(AUDIT_TTY,                        "TTY"                           )
 _S(AUDIT_EOE,                        "EOE"                           )
 _S(AUDIT_BPRM_FCAPS,                 "BPRM_FCAPS"                    )
 _S(AUDIT_CAPSET,                     "CAPSET"                        )
+_S(AUDIT_MMAP,                       "MMAP"                          )
+_S(AUDIT_NETFILTER_PKT,              "NETFILTER_PKT"                 )
+_S(AUDIT_NETFILTER_CFG,              "NETFILTER_CFG"                 )
 _S(AUDIT_AVC,                        "AVC"                           )
 _S(AUDIT_SELINUX_ERR,                "SELINUX_ERR"                   )
 _S(AUDIT_AVC_PATH,                   "AVC_PATH"                      )

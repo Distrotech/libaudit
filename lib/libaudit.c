@@ -1,5 +1,5 @@
 /* libaudit.c -- 
- * Copyright 2004-2007,2010 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2004-2009 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -280,8 +280,10 @@ static int load_libaudit_config(const char *path)
 			lineno++;
 			continue;
 		}
-		if (nv.value == NULL)
-			return 1; 
+		if (nv.value == NULL) {
+			fclose(f);
+			return 1;
+		}
 
 		/* identify keyword or error */
 		kw = kw_lookup(nv.name);
@@ -1082,7 +1084,7 @@ int audit_rule_fieldpair_data(struct audit_rule_data **rulep, const char *pair,
 			}
 			break;
 		case AUDIT_FILETYPE:
-			if (flags != AUDIT_FILTER_EXIT && flags != AUDIT_FILTER_ENTRY)
+			if (!(flags == AUDIT_FILTER_EXIT || flags == AUDIT_FILTER_ENTRY))
 				return -17;
 			rule->values[rule->field_count] = 
 				audit_name_to_ftype(v);
@@ -1114,8 +1116,8 @@ int audit_rule_fieldpair_data(struct audit_rule_data **rulep, const char *pair,
 					return -13;
 			}
 
-			if (field == AUDIT_PPID && flags != AUDIT_FILTER_EXIT 
-				&& flags != AUDIT_FILTER_ENTRY)
+			if (field == AUDIT_PPID && !(flags == AUDIT_FILTER_EXIT
+				|| flags == AUDIT_FILTER_ENTRY))
 				return -17;
 			
 			if (flags == AUDIT_FILTER_EXCLUDE)
@@ -1124,7 +1126,12 @@ int audit_rule_fieldpair_data(struct audit_rule_data **rulep, const char *pair,
 			if (!isdigit((char)*(v)))
 				return -21;
 
-			rule->values[rule->field_count] = strtol(v, NULL, 0);
+			if (field == AUDIT_INODE)
+				rule->values[rule->field_count] =
+					strtoul(v, NULL, 0);
+			else
+				rule->values[rule->field_count] =
+					strtol(v, NULL, 0);
 			break;
 	}
 	rule->field_count++;

@@ -7,6 +7,10 @@
 - Fix memory leak in aureport
 - Fix parsing state problem in libauparse
 - Update prelude support
+- Add new event types
+- Update syscall tables
+- On i386, audit rules do not work on inode's with a large number
+- Improve the robustness of libaudit field encoding functions
 
 1.7.18
 - Update time examples in ausearch/report man pages

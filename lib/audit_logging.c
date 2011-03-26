@@ -1,5 +1,5 @@
 /* audit_logging.c -- 
- * Copyright 2005-2008 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2005-2008,2010,2011 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -85,6 +85,9 @@ int audit_value_needs_encoding(const char *str, unsigned int size)
 {
 	int i;
 
+	if (str == NULL)
+		return 0;
+
 	for (i=0; i<size; i++) {
 		// we don't test for > 0x7f because str[] is signed.
 		if (str[i] == '"' || str[i] < 0x21 || str[i] == 0x7F)
@@ -102,6 +105,14 @@ char *audit_encode_value(char *final, const char *buf, unsigned int size)
 	char *ptr = final;
 	const char *hex = "0123456789ABCDEF";
 
+	if (final == NULL)
+		return NULL;
+
+	if (buf == NULL) {
+		*final = 0;
+		return final;
+	}
+
 	for (i=0; i<size; i++) {
 		*ptr++ = hex[(buf[i] & 0xF0)>>4]; /* Upper nibble */
 		*ptr++ = hex[buf[i] & 0x0F];      /* Lower nibble */
@@ -115,16 +126,19 @@ char *audit_encode_nv_string(const char *name, const char *value,
 {
 	char *str;
 
-	if (vlen == 0)
+	if (vlen == 0 && value)
 		vlen = strlen(value);
 
-	if (audit_value_needs_encoding(value, vlen)) {
+	if (value && audit_value_needs_encoding(value, vlen)) {
 		char *tmp = malloc(2*vlen + 1);
-		audit_encode_value(tmp, value, vlen);
-		asprintf(&str, "%s=%s", name, tmp);
-		free(tmp);
+		if (tmp) {
+			audit_encode_value(tmp, value, vlen);
+			asprintf(&str, "%s=%s", name, tmp);
+			free(tmp);
+		} else
+			str = NULL;
 	} else
-		asprintf(&str, "%s=\"%s\"", name, value);
+		asprintf(&str, "%s=\"%s\"", name, value ? value : "?");
 	return str;
 }
 
@@ -134,19 +148,14 @@ char *audit_encode_nv_string(const char *name, const char *value,
 static char *_get_exename(char *exename, int size)
 {
 	int res;
-	char tmp[PATH_MAX];
+	char tmp[PATH_MAX+1];
 
 	/* get the name of the current executable */
-	if ((res = readlink("/proc/self/exe", tmp, PATH_MAX - 1)) == -1) {
+	if ((res = readlink("/proc/self/exe", tmp, PATH_MAX)) == -1) {
 		strcpy(exename, "\"?\"");
 		audit_msg(LOG_ERR, "get_exename: cannot determine executable");
 	} else {
-		int len;
-
 		tmp[res] = '\0';
-		len = strlen(tmp);
-		if (len < res)
-			res = len;
 		if (audit_value_needs_encoding(tmp, res))
 			return audit_encode_value(exename, tmp, res);
 		snprintf(exename, size, "\"%s\"", tmp);

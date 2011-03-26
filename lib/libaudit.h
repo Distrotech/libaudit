@@ -1,5 +1,5 @@
 /* libaudit.h -- 
- * Copyright 2004-2009 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2004-2011 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -46,7 +46,8 @@ extern "C" {
  * 1500 - 1599 AppArmor events
  * 1600 - 1699 kernel crypto events
  * 1700 - 1799 kernel anomaly records
- * 1800 - 1999 future kernel use (maybe integrity labels and related events)
+ * 1800 - 1899 kernel integrity labels and related events
+ * 1800 - 1999 future kernel use
  * 2001 - 2099 unused (kernel)
  * 2100 - 2199 user space anomaly records
  * 2200 - 2299 user space actions taken in response to anomalies
@@ -88,6 +89,8 @@ extern "C" {
 #define AUDIT_SYSTEM_BOOT	1127	/* System boot */
 #define AUDIT_SYSTEM_SHUTDOWN	1128	/* System shutdown */
 #define AUDIT_SYSTEM_RUNLEVEL	1129	/* System runlevel change */
+#define AUDIT_SERVICE_START	1130	/* Service (daemon) start */
+#define AUDIT_SERVICE_STOP	1131	/* Service (daemon) stop */
 
 #define AUDIT_FIRST_DAEMON	1200
 #define AUDIT_LAST_DAEMON	1299
@@ -128,6 +131,17 @@ extern "C" {
 
 #ifndef AUDIT_CAPSET
 #define AUDIT_CAPSET		1322	/* Capability syscall structures */
+#endif
+
+#ifndef AUDIT_MMAP
+#define AUDIT_MMAP              1323 /* Descriptor and flags in mmap */
+#endif
+
+#ifndef AUDIT_NETFILTER_PKT
+#define AUDIT_NETFILTER_PKT     1324 /* Packets traversing netfilter chains */
+#endif
+#ifndef AUDIT_NETFILTER_CFG
+#define AUDIT_NETFILTER_CFG     1325 /* Netfilter chain modifications */
 #endif
 
 #define AUDIT_FIRST_SELINUX	1400

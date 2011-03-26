@@ -1,5 +1,5 @@
 /* x86_64_table.h --
- * Copyright 2005-09 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2005-11 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This library is free software; you can redistribute it and/or
@@ -318,5 +318,9 @@ _S(294, "inotify_init1")
 _S(295, "preadv")
 _S(296, "pwritev")
 _S(297, "rt_tgsigqueueinfo")
-_S(298, "perf_counter_open")
+_S(298, "perf_event_open")
+_S(299, "recvmmsg")
+_S(300, "fanotify_init")
+_S(301, "fanotify_mark")
+_S(302, "prlimit64")
 
