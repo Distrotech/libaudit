@@ -1,7 +1,7 @@
 dnl
 define([AC_INIT_NOTICE],
 [### Generated automatically using autoconf version] AC_ACVERSION [
-### Copyright 2005-10 Steve Grubb <sgrubb@redhat.com>
+### Copyright 2005-11 Steve Grubb <sgrubb@redhat.com>
 ###
 ### Permission is hereby granted, free of charge, to any person obtaining a
 ### copy of this software and associated documentation files (the "Software"),
@@ -86,14 +86,14 @@ AC_ARG_ENABLE(gssapi_krb5,
           no) want_gssapi_krb5="no" ;;
            *) AC_MSG_ERROR(bad value ${enableval} for --enable-gssapi-krb5) ;;
          esac],
-	[want_gssapi_krb5=yes]
+	[want_gssapi_krb5="no"]
 )
 if test $want_gssapi_krb5 = yes; then
 	AC_CHECK_LIB(gssapi_krb5, gss_acquire_cred, [
 		AC_CHECK_HEADER(gssapi/gssapi.h, [
 			AC_DEFINE(USE_GSSAPI,,
 				  Define if you want to use GSSAPI)
-			gss_libs="-lgssapi_krb5"
+			gss_libs="-lgssapi_krb5 -lkrb5"
 			AC_SUBST(gss_libs)
 		])
 	])
@@ -136,6 +136,18 @@ else
 	AC_MSG_RESULT(no)
 fi
 AM_CONDITIONAL(USE_ALPHA, test x$use_alpha = xyes)
+
+AC_MSG_CHECKING(whether to include arm eabi processor support)
+AC_ARG_WITH(armeb,
+AS_HELP_STRING([--with-armeb],[enable Arm eabi processor support]),
+use_armeb=$withval,
+use_armeb=no)
+if test x$use_armeb != xno ; then
+      AC_DEFINE(WITH_ARMEB,1,[Define if you want to enable Arm eabi processor support.])
+else
+	AC_MSG_RESULT(no)
+fi
+AM_CONDITIONAL(USE_ARMEB, test x$use_armeb = xyes)
 
 AC_MSG_CHECKING(whether to use apparmor)
 AC_ARG_WITH(apparmor,
