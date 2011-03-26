@@ -1,5 +1,5 @@
 /* auditctl.c -- 
- * Copyright 2004-2009 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2004-2011 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -1139,11 +1139,15 @@ int main(int argc, char *argv[])
 		else
 			return 0;
 	} else {
-		if (reset_vars())
+		if (reset_vars()) {
+			free(rule_new);
 			return 1;
+		}
 		retval = setopt(argc, 0, argv);
-		if (retval == -3)
+		if (retval == -3) {
+			free(rule_new);
 			return 0;
+		}
 	}
 
 	if (add != AUDIT_FILTER_UNSET || del != AUDIT_FILTER_UNSET) {
@@ -1152,13 +1156,17 @@ int main(int argc, char *argv[])
 			fprintf(stderr,
 				"The audit system is in immutable "
 				"mode, no rule changes allowed\n");
+			free(rule_new);
 			return 0;
 		} else if (errno == ECONNREFUSED) {
 			fprintf(stderr, "The audit system is disabled\n");
+			free(rule_new);
 			return 0;
 		}
 	}
-	return handle_request(retval);
+	retval = handle_request(retval);
+	free(rule_new);
+	return retval;
 }
 
 /*
