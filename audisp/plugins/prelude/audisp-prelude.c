@@ -1,5 +1,5 @@
 /* audisp-prelude.c --
- * Copyright 2008 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2008-09,2011 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -222,6 +222,7 @@ int main(int argc, char *argv[])
 	if (au == NULL) {
 		syslog(LOG_ERR,
 		    "audisp-prelude is exiting due to auparse init errors");
+		free_config(&config);
 		return -1;
 	}
 	auparse_add_callback(au, handle_event, NULL, NULL);
@@ -231,6 +232,8 @@ int main(int argc, char *argv[])
 		else
 			syslog(LOG_ERR,
 		    "audisp-prelude is exiting due to init_prelude failure");
+		free_config(&config);
+		auparse_destroy(au);
 		return -1;
 	}
 
@@ -1026,7 +1029,9 @@ static int do_assessment(idmef_alert_t *alert, auparse_state_t *au,
 	if (descr) {
 		prelude_string_t *str;
 		ret = idmef_impact_new_description(impact, &str);
-		prelude_string_set_ref(str, descr);
+		PRELUDE_FAIL_CHECK;
+		ret = prelude_string_set_ref(str, descr);
+		PRELUDE_FAIL_CHECK;
 	}
 
 	// FIXME: I think this is wrong. sb a way to express indeterminate
