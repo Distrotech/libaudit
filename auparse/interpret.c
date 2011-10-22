@@ -74,6 +74,8 @@
 #include "socktabs.h"
 #include "seeks.h"
 #include "typetabs.h"
+#include "nfprototabs.h"
+#include "icmptypetabs.h"
 
 typedef enum { AVC_UNSET, AVC_DENIED, AVC_GRANTED } avc_t;
 typedef enum { S_UNSET=-1, S_FAILED, S_SUCCESS } success_t;
@@ -499,6 +501,10 @@ static const char *print_sockaddr(const char *val)
 
         slen = strlen(val)/2;
         host = au_unescape((char *)val);
+	if (host == NULL) {
+                asprintf(&out, "malformed host(%s)", val);
+		return out;
+	}
         saddr = (struct sockaddr *)host;
 
 
@@ -943,6 +949,71 @@ static const char *print_signals(const char *val)
 	return out;
 }
 
+static const char *print_nfproto(const char *val)
+{
+        int proto;
+	char *out;
+	const char *s;
+
+        errno = 0;
+        proto = strtoul(val, NULL, 10);
+        if (errno) {
+                asprintf(&out, "conversion error(%s)", val);
+                return out;
+        }
+
+	s = nfproto_i2s(proto);
+	if (s != NULL)
+		return strdup(s);
+	asprintf(&out, "unknown netfilter protocol (%s)", val);
+	return out;
+}
+
+static const char *print_icmptype(const char *val)
+{
+        int icmptype;
+	char *out;
+	const char *s;
+
+        errno = 0;
+        icmptype = strtoul(val, NULL, 10);
+        if (errno) {
+                asprintf(&out, "conversion error(%s)", val);
+                return out;
+        }
+
+	s = icmptype_i2s(icmptype);
+	if (s != NULL)
+		return strdup(s);
+	asprintf(&out, "unknown icmp type (%s)", val);
+	return out;
+}
+
+static const char *print_protocol(const char *val)
+{
+	int i;
+	char *out;
+
+	errno = 0;
+        i = strtoul(val, NULL, 10);
+	if (errno) 
+		asprintf(&out, "conversion error(%s)", val);
+	else {
+		struct protoent *p = getprotobynumber(i);
+		if (p)
+			out = strdup(p->p_name);
+		else
+			out = strdup("undefined protocol");
+	}
+	return out;
+}
+
+static const char *print_addr(const char *val)
+{
+	char *out = strdup(val);
+	return out;
+}
+
 static const char *print_list(const char *val)
 {
 	int i;
@@ -1107,19 +1178,21 @@ int lookup_type(const char *name)
 const char *interpret(const rnode *r)
 {
 	const nvlist *nv = &r->nv;
-	int type, comma = 0;
+	int type;
 	nvnode *n;
 	const char *out;
 	const char *name = nvlist_get_cur_name(nv);
 	const char *val = nvlist_get_cur_val(nv);
 
 	/* Do some fixups */
-	if (r->type == AUDIT_EXECVE && name[0] == 'a')
+	if (r->type == AUDIT_EXECVE && name[0] == 'a' && strcmp(name, "argc"))
 		type = AUPARSE_TYPE_ESCAPED;
 	else if (r->type == AUDIT_AVC && strcmp(name, "saddr") == 0)
 		type = -1;
 	else if (r->type == AUDIT_USER_TTY && strcmp(name, "msg") == 0)
 		type = AUPARSE_TYPE_ESCAPED;
+	else if (r->type == AUDIT_NETFILTER_PKT && strcmp(name, "saddr") == 0)
+		type = AUPARSE_TYPE_ADDR;
 	else if (strcmp(name, "acct") == 0) {
 		if (val[0] == '"')
 			type = AUPARSE_TYPE_ESCAPED;
@@ -1194,15 +1267,22 @@ const char *interpret(const rnode *r)
 		case AUPARSE_TYPE_CAP_BITMAP:
 			out = print_cap_bitmap(val);
 			break;
+		case AUPARSE_TYPE_NFPROTO:
+			out = print_nfproto(val);
+			break; 
+		case AUPARSE_TYPE_ICMPTYPE:
+			out = print_icmptype(val);
+			break; 
+		case AUPARSE_TYPE_PROTOCOL:
+			out = print_protocol(val);
+			break; 
+		case AUPARSE_TYPE_ADDR:
+			out = print_addr(val);
+			break;
 		case AUPARSE_TYPE_UNCLASSIFIED:
-		default: {
-			char *out2;
-			if (comma)
-				asprintf(&out2, "%s,", val);
-			else
-				out2 = strdup(val);
-			out = out2;
-			}
+		default:
+			out = strdup(val);
+			break;
         }
 
 	n = nvlist_get_cur(nv);
