@@ -34,7 +34,6 @@
 #include <linux/if.h>	// FIXME: remove when ipx.h is fixed
 #include <linux/ipx.h>
 #include <linux/net.h>
-#include <linux/netfilter.h>
 #include <linux/icmp.h>
 #include <time.h>
 #include <stdlib.h>
@@ -53,7 +52,7 @@ struct nv_pair {
 /* This is the list of field types that we can interpret */
 enum { T_UID, T_GID, T_SYSCALL, T_ARCH, T_EXIT, T_ESCAPED, T_PERM, T_MODE, 
 T_SOCKADDR, T_FLAGS, T_PROMISC, T_CAPABILITY, T_SIGNAL, T_KEY, T_LIST,
-T_TTY_DATA, T_SESSION, T_CAP_BITMAP, T_NFPROTO, T_ICMPTYPE, T_PROTOCOL,
+T_TTY_DATA, T_SESSION, T_CAP_BITMAP, T_ICMPTYPE, T_PROTOCOL,
 T_ADDR };
 
 /* Function in ausearch-parse for unescaping filenames */
@@ -376,7 +375,6 @@ static struct nv_pair typetab[] = {
 	{T_ESCAPED, "new-disk"},
 	{T_ESCAPED, "device"},
 	{T_ESCAPED, "cgroup"},
-	{T_NFPROTO, "family"},
 	{T_ICMPTYPE, "icmptype"},
 	{T_PROTOCOL, "proto"},
 };
@@ -913,38 +911,6 @@ static void print_cap_bitmap(char *val)
 }
 
 /*
- * This table maps netfilter protocol defines to their text name
- */
-static struct nv_pair nfprototab[] = {
-        {NFPROTO_UNSPEC, "unspecified"},
-        {NFPROTO_IPV4, "ipv4"},
-        {NFPROTO_ARP, "arp"},
-        {NFPROTO_BRIDGE, "bridge"},
-        {NFPROTO_IPV6, "ipv6"},
-        {NFPROTO_DECNET, "decnet"},
-};
-#define NFPROTO_NAMES (sizeof(nfprototab)/sizeof(nfprototab[0]))
-
-static void print_nfproto(char *val)
-{
-	int proto, i;
-
-	errno = 0;
-	proto = strtoul(val, NULL, 10);
-	if (errno) {
-		printf("conversion error(%s) ", val);
-		return;
-	}
-
-        for (i = 0; i < NFPROTO_NAMES; i++) {
-                if (nfprototab[i].value == proto) {
-                        printf("%s ", nfprototab[i].name);
-			return;
-		}
-	}
-}
-
-/*
  * This table maps icmp type defines to their text name
  */
 static struct nv_pair icmptypetab[] = {
@@ -1154,9 +1120,6 @@ static void interpret(char *name, char *val, int comma, int rtype)
 			break;
 		case T_CAP_BITMAP:
 			print_cap_bitmap(val);
-			break;
-		case T_NFPROTO:
-			print_nfproto(val);
 			break;
 		case T_ICMPTYPE:
 			print_icmptype(val);

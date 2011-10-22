@@ -74,7 +74,6 @@
 #include "socktabs.h"
 #include "seeks.h"
 #include "typetabs.h"
-#include "nfprototabs.h"
 #include "icmptypetabs.h"
 
 typedef enum { AVC_UNSET, AVC_DENIED, AVC_GRANTED } avc_t;
@@ -949,26 +948,6 @@ static const char *print_signals(const char *val)
 	return out;
 }
 
-static const char *print_nfproto(const char *val)
-{
-        int proto;
-	char *out;
-	const char *s;
-
-        errno = 0;
-        proto = strtoul(val, NULL, 10);
-        if (errno) {
-                asprintf(&out, "conversion error(%s)", val);
-                return out;
-        }
-
-	s = nfproto_i2s(proto);
-	if (s != NULL)
-		return strdup(s);
-	asprintf(&out, "unknown netfilter protocol (%s)", val);
-	return out;
-}
-
 static const char *print_icmptype(const char *val)
 {
         int icmptype;
@@ -1267,9 +1246,6 @@ const char *interpret(const rnode *r)
 		case AUPARSE_TYPE_CAP_BITMAP:
 			out = print_cap_bitmap(val);
 			break;
-		case AUPARSE_TYPE_NFPROTO:
-			out = print_nfproto(val);
-			break; 
 		case AUPARSE_TYPE_ICMPTYPE:
 			out = print_icmptype(val);
 			break; 
