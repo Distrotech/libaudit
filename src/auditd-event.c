@@ -1287,7 +1287,6 @@ static void reconfigure(struct auditd_consumer_data *data)
 		fs_admin_space_warning = 0;
 		fs_space_left = 1;
 		logging_suspended = 0;
-		check_excess_logs(data);
 		check_space_left(data->log_fd, oconf);
 		if (logging_suspended == 0)
 			logging_suspended = saved_suspend;
