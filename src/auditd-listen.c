@@ -1,5 +1,5 @@
 /* auditd-listen.c -- 
- * Copyright 2008,2009 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2008,2009,2011 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -195,7 +195,7 @@ static int recv_token (int s, gss_buffer_t tok)
 	       | lenbuf[3]);
 	if (len > MAX_AUDIT_MESSAGE_LENGTH) {
 		audit_msg(LOG_ERR,
-			"GSS-API error: event length exceeds MAX_AUDIT_LENGTH");
+			"GSS-API error: event length excedes MAX_AUDIT_LENGTH");
 		return -1;
 	}
 	tok->length = len;
@@ -286,7 +286,9 @@ static void gss_failure (const char *msg, int major_status, int minor_status)
 }
 
 #define KCHECK(x,f) if (x) { \
-		audit_msg (LOG_ERR, "krb5 error: %s in %s\n", krb5_get_error_message (kcontext, x), f); \
+		const char *kstr = krb5_get_error_message(kcontext, x); \
+		audit_msg(LOG_ERR, "krb5 error: %s in %s\n", kstr, f); \
+		krb5_free_error_message(kcontext, kstr); \
 		return -1; }
 
 /* These are our private credentials, which come from a key file on
@@ -860,7 +862,7 @@ int auditd_tcp_listen_init ( struct ev_loop *loop, struct daemon_conf *config )
 		return 0;
 
 	listen_socket = socket (AF_INET, SOCK_STREAM, 0);
-	if (listen_socket == 0) {
+	if (listen_socket < 0) {
         	audit_msg(LOG_ERR, "Cannot create tcp listener socket");
 		return 1;
 	}

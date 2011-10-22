@@ -778,11 +778,15 @@ static int parse_user(const lnode *n, search_items *s)
 		if (str) {
 			str += 9;
 			term = strchr(str, ',');
-			if (term == NULL)
-				return 15;
+			if (term == NULL) {
+				term = strchr(str, ' ');
+				if (term == NULL)
+					return 15;
+			}
+			saved = *term;
 			*term = 0;
 			s->hostname = strdup(str);
-			*term = ',';
+			*term = saved;
 
 			// Lets see if there is something more
 			// meaningful in addr
@@ -792,12 +796,16 @@ static int parse_user(const lnode *n, search_items *s)
 				if (str) {
 					str += 5;
 					term = strchr(str, ',');
-					if (term == NULL)
-						return 16;
+					if (term == NULL) {
+						term = strchr(str, ' ');
+						if (term == NULL)
+							return 16;
+					}
+					saved = *term;
 					*term = 0;
 					free(s->hostname);
 					s->hostname = strdup(str);
-					*term = ',';
+					*term = saved;
 				}
 			}
 		}
@@ -956,6 +964,8 @@ static int parse_login(const lnode *n, search_items *s)
 	}
 	// ses
 	if (event_session_id != -2 ) {
+		if (term == NULL)
+			term = n->message;
 		str = strstr(term, "new ses=");
 		if (str) {
 			ptr = str + 8;
@@ -1448,14 +1458,14 @@ static int parse_simple_message(const lnode *n, search_items *s)
 		if (str) {
 			ptr = str + 4;
 			term = strchr(ptr, ' ');
-			if (term == NULL)
-				return 3;
-			*term = 0;
+			if (term)
+				*term = 0;
 			errno = 0;
 			s->session_id = strtoul(ptr, NULL, 10);
 			if (errno)
-				return 4;
-			*term = ' ';
+				return 3;
+			if (term)
+				*term = ' ';
 		}
 	}
 
@@ -1479,7 +1489,7 @@ static int parse_simple_message(const lnode *n, search_items *s)
 				else	// Set it back to something sane
 					term = str;
 			} else
-				return 5;
+				return 4;
 		}
 	}
 
@@ -1490,7 +1500,7 @@ static int parse_simple_message(const lnode *n, search_items *s)
 				//create
 				s->key = malloc(sizeof(slist));
 				if (s->key == NULL)
-					return 6;
+					return 5;
 				slist_create(s->key);
 			}
 			ptr = str + 4;
@@ -1509,7 +1519,7 @@ static int parse_simple_message(const lnode *n, search_items *s)
 					}
 					*term = '"';
 				} else
-					return 7;
+					return 6;
 			} else {
 				if (s->key) {
 					char *saved=NULL;
@@ -1549,7 +1559,7 @@ static int parse_simple_message(const lnode *n, search_items *s)
 			errno = 0;
 			s->success = strtoul(ptr, NULL, 10);
 			if (errno)
-				return 8;
+				return 7;
 			if (term)
 				*term = ' ';
 		}

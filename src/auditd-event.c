@@ -1,5 +1,5 @@
 /* auditd-event.c -- 
- * Copyright 2004-08 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2004-08,2011 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -151,7 +151,7 @@ int init_event(struct daemon_conf *config)
    dequeue'r is responsible for freeing the memory. */
 void enqueue_event(struct auditd_reply_list *rep)
 {
-	char *buf;
+	char *buf = NULL;
 	int len;
 
 	rep->ack_func = 0;
@@ -179,15 +179,16 @@ void enqueue_event(struct auditd_reply_list *rep)
 			return;
 		}
 
-		len = strlen (buf);
-		if (len < MAX_AUDIT_MESSAGE_LENGTH - 1) {
-			memcpy (rep->reply.msg.data, buf, len+1);
-		}
-		else
-		{
-			/* FIXME: is truncation the right thing to do?  */
-			memcpy (rep->reply.msg.data, buf, MAX_AUDIT_MESSAGE_LENGTH-1);
-			rep->reply.msg.data[MAX_AUDIT_MESSAGE_LENGTH-1] = 0;
+		if (buf) {
+			len = strlen(buf);
+			if (len < MAX_AUDIT_MESSAGE_LENGTH - 1)
+				memcpy(rep->reply.msg.data, buf, len+1);
+			else {
+				// FIXME: is truncation the right thing to do?
+				memcpy(rep->reply.msg.data, buf,
+						MAX_AUDIT_MESSAGE_LENGTH-1);
+				rep->reply.msg.data[MAX_AUDIT_MESSAGE_LENGTH-1] = 0;
+			}
 		}
 	}
 
@@ -1164,9 +1165,10 @@ static void reconfigure(struct auditd_consumer_data *data)
 			logging_suspended = 1;
 			// Likely errors: ENOMEM, ENOSPC
 			do_disk_error_action("reconfig", data->config);
-		} else
+		} else {
 			logging_suspended = 0;
-		check_log_file_size(data->log_fd, data);
+			check_log_file_size(data->log_fd, data);
+		}
 	}
 
 	/* At this point we will start working on items that are 

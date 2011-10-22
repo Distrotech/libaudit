@@ -15,6 +15,8 @@
 - Fix autrace to use correct syscalls on i386 systems (Peng Haitao)
 - In auparse, add ability to interpret session and capabilities
 - Add ability for audispd syslog plugin to choose facility local0-7
+- Report server issues to remote client
+- Update ausearch parsing
 
 1.7.18
 - Update time examples in ausearch/report man pages
