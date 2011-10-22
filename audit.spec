@@ -163,7 +163,7 @@ fi
 
 %files libs
 %defattr(-,root,root)
-%attr(755,root,root) /%{_lib}/libaudit.so.1*
+%attr(755,root,root) /%{_lib}/libaudit.so.0*
 %attr(755,root,root) /%{_lib}/libauparse.*
 %config(noreplace) %attr(640,root,root) /etc/libaudit.conf
 
