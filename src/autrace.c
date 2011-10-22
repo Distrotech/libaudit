@@ -1,5 +1,5 @@
 /* autrace.c -- 
- * Copyright 2005-09 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2005-09,2011 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -54,6 +54,7 @@ static int insert_rule(int audit_fd, const char *field)
 	int action = AUDIT_ALWAYS;
 	struct audit_rule_data *rule = malloc(sizeof(struct audit_rule_data));
 	int machine = audit_detect_machine();
+	char *t_field = strdup(field);
 
 	if (rule == NULL)
 		goto err;
@@ -87,7 +88,8 @@ static int insert_rule(int audit_fd, const char *field)
 		rc |= audit_rule_syscallbyname_data(rule, "readlinkat");
 		rc |= audit_rule_syscallbyname_data(rule, "execve");
 
-		if (machine != MACH_X86) {
+		if (machine != MACH_X86 && machine != MACH_S390X && 
+						machine != MACH_S390) {
 			rc |= audit_rule_syscallbyname_data(rule, "connect");
 			rc |= audit_rule_syscallbyname_data(rule, "bind");
 			rc |= audit_rule_syscallbyname_data(rule, "accept");
@@ -100,7 +102,8 @@ static int insert_rule(int audit_fd, const char *field)
 		rc = audit_rule_syscallbyname_data(rule, "all");
 	if (rc < 0)
 		goto err;
-	rc = audit_rule_fieldpair_data(&rule, field, flags);
+	rc = audit_rule_fieldpair_data(&rule, t_field, flags);
+	free(t_field);
 	if (rc < 0)
 		goto err;
 	rc = audit_add_rule_data(audit_fd, rule, flags, action);
@@ -108,7 +111,8 @@ static int insert_rule(int audit_fd, const char *field)
 		goto err;
 
 	// Now if i386, lets add its network rules
-	if (machine == MACH_X86) {
+	if (machine == MACH_X86 || machine == MACH_S390X ||
+						machine == MACH_S390) {
 		int i, a0[5] = { SYS_CONNECT, SYS_BIND, SYS_ACCEPT, SYS_SENDTO, SYS_RECVFROM };
 		for (i=0; i<5; i++) {
 			char pair[32];
@@ -117,6 +121,9 @@ static int insert_rule(int audit_fd, const char *field)
 			rc |= audit_rule_syscallbyname_data(rule, "socketcall");
 			snprintf(pair, sizeof(pair), "a0=%d", a0[i]);
 			rc |= audit_rule_fieldpair_data(&rule, pair, flags);
+			t_field = strdup(field);
+			rc |= audit_rule_fieldpair_data(&rule, t_field, flags);
+			free(t_field);
 			rc |= audit_add_rule_data(audit_fd, rule, flags, action);
 		}
 	}
@@ -216,19 +223,19 @@ int main(int argc, char *argv[])
 			close(fd[0]);
 			fcntl(fd[1], F_SETFD, FD_CLOEXEC);
 			{
-				char rule[16];
+				char field[16];
 				int audit_fd;
   				audit_fd = audit_open();
 				if (audit_fd < 0)
 					exit(1);
-				snprintf(rule, sizeof(rule), "pid=%d", pid);
-				if (insert_rule(audit_fd, rule)) {
+				snprintf(field, sizeof(field), "pid=%d", pid);
+				if (insert_rule(audit_fd, field)) {
 					kill(pid,SIGTERM);
 					(void)delete_all_rules(audit_fd);
 					exit(1);
 				}
-				snprintf(rule, sizeof(rule), "ppid=%d", pid);
-				if (insert_rule(audit_fd, rule)) {
+				snprintf(field, sizeof(field), "ppid=%d", pid);
+				if (insert_rule(audit_fd, field)) {
 					kill(pid,SIGTERM);
 					(void)delete_all_rules(audit_fd);
 					exit(1);

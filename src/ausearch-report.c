@@ -1,6 +1,6 @@
 /*
 * ausearch-report.c - Format and output events
-* Copyright (c) 2005-09 Red Hat Inc., Durham, North Carolina.
+* Copyright (c) 2005-09,2011 Red Hat Inc., Durham, North Carolina.
 * All Rights Reserved. 
 *
 * This software may be freely redistributed and/or modified under the
@@ -34,6 +34,8 @@
 #include <linux/if.h>	// FIXME: remove when ipx.h is fixed
 #include <linux/ipx.h>
 #include <linux/net.h>
+#include <linux/netfilter.h>
+#include <linux/icmp.h>
 #include <time.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -51,7 +53,8 @@ struct nv_pair {
 /* This is the list of field types that we can interpret */
 enum { T_UID, T_GID, T_SYSCALL, T_ARCH, T_EXIT, T_ESCAPED, T_PERM, T_MODE, 
 T_SOCKADDR, T_FLAGS, T_PROMISC, T_CAPABILITY, T_SIGNAL, T_KEY, T_LIST,
-T_TTY_DATA, T_SESSION };
+T_TTY_DATA, T_SESSION, T_CAP_BITMAP, T_NFPROTO, T_ICMPTYPE, T_PROTOCOL,
+T_ADDR };
 
 /* Function in ausearch-parse for unescaping filenames */
 extern char *unescape(char *buf);
@@ -162,6 +165,7 @@ static void output_interpreted(llist *l)
 static void output_interpreted_node(const lnode *n)
 {
 	char *ptr, *str = n->message, *node = NULL;
+	int found;
 
 	/* Check and see if we start with a node */
 	if (str[0] == 'n') {
@@ -253,9 +257,11 @@ no_print:
 		a0 = n->a0;
 
 	// for each item.
+	found = 0;
 	while (str && *str && (ptr = strchr(str, '='))) {
 		char *name, *val;
 		int comma = 0;
+		found = 1;
 
 		// look back to last space - this is name
 		name = ptr;
@@ -305,6 +311,9 @@ no_print:
 		// print interpreted string
 		interpret(name, val, comma, n->type);
 	}
+	// If nothing found, just print out as is
+	if (!found && ptr == NULL && str)
+		printf("%s", str);
 	printf("\n");
 }
 
@@ -357,6 +366,19 @@ static struct nv_pair typetab[] = {
 	{T_SIGNAL, "sig"},
 	{T_LIST, "list"},
 	{T_SESSION, "ses"},
+	{T_CAP_BITMAP, "cap_pi"},
+	{T_CAP_BITMAP, "cap_pe"},
+	{T_CAP_BITMAP, "cap_pp"},
+	{T_CAP_BITMAP, "cap_fi"},
+	{T_CAP_BITMAP, "cap_fp"},
+	{T_ESCAPED, "vm"},
+	{T_ESCAPED, "old-disk"},
+	{T_ESCAPED, "new-disk"},
+	{T_ESCAPED, "device"},
+	{T_ESCAPED, "cgroup"},
+	{T_NFPROTO, "family"},
+	{T_ICMPTYPE, "icmptype"},
+	{T_PROTOCOL, "proto"},
 };
 #define TYPE_NAMES (sizeof(typetab)/sizeof(typetab[0]))
 
@@ -637,7 +659,10 @@ static void print_sockaddr(char *val)
 	len = strlen(val)/2;
 	host = unescape(val);
 	saddr = (struct sockaddr *)host;
-
+	if (saddr == NULL) {
+		printf("Malformed address ");
+		return;
+	}
 	
 	str = audit_lookup_fam(saddr->sa_family);
 	if (str)
@@ -710,7 +735,7 @@ static void print_sockaddr(char *val)
 			break;
                 case AF_INET6:
 			if (len < sizeof(struct sockaddr_in6)) {
-				printf("sockaddr6 len too short");
+				printf("sockaddr6 len too short ");
 				free(host);
 				return;
 			}
@@ -731,6 +756,11 @@ static void print_sockaddr(char *val)
 			break;
 	}
 	free(host);
+}
+
+static void print_addr(char *val)
+{
+	printf("%s ", val);
 }
 
 /*
@@ -792,7 +822,7 @@ static void print_promiscuous(const char *val)
 }
 
 /*
- * This table maps file system flags to their text name
+ * This table maps posix capability defines to their text name
  */
 static struct nv_pair captab[] = {
         {0, "chown"},
@@ -829,6 +859,8 @@ static struct nv_pair captab[] = {
         {31, "setfcap"},
         {32, "mac_overide"},
         {33, "mac_admin"},
+        {34, "syslog"},
+        {35, "wake_alarm"},
 };
 #define CAP_NAMES (sizeof(captab)/sizeof(captab[0]))
 
@@ -848,7 +880,106 @@ static void print_capabilities(char *val)
                         printf("%s ", captab[i].name);
 			return;
 		}
+	}
+}
 
+static void print_cap_bitmap(char *val)
+{
+#define MASK(x) (1U << (x))
+	unsigned long long temp;
+	__u32 caps[2];
+	int i, found=0;
+
+	errno = 0;
+	temp = strtoull(val, NULL, 16);
+	if (errno) {
+		printf("conversion error(%s) ", val);
+		return;
+	}
+
+	caps[0] = temp & 0xFFFFFFFF;
+	caps[1] = (temp & 0xFFFFFFFF) >> 32;
+	for (i=0; i< CAP_NAMES; i++) {
+		if (MASK(i%32) & caps[i/32]) {
+			if (found)
+				printf(",");
+       			printf("%s", captab[i].name);
+			found = 1;
+		}
+	}
+	if (found == 0)
+		printf("none");
+	printf(" ");
+}
+
+/*
+ * This table maps netfilter protocol defines to their text name
+ */
+static struct nv_pair nfprototab[] = {
+        {NFPROTO_UNSPEC, "unspecified"},
+        {NFPROTO_IPV4, "ipv4"},
+        {NFPROTO_ARP, "arp"},
+        {NFPROTO_BRIDGE, "bridge"},
+        {NFPROTO_IPV6, "ipv6"},
+        {NFPROTO_DECNET, "decnet"},
+};
+#define NFPROTO_NAMES (sizeof(nfprototab)/sizeof(nfprototab[0]))
+
+static void print_nfproto(char *val)
+{
+	int proto, i;
+
+	errno = 0;
+	proto = strtoul(val, NULL, 10);
+	if (errno) {
+		printf("conversion error(%s) ", val);
+		return;
+	}
+
+        for (i = 0; i < NFPROTO_NAMES; i++) {
+                if (nfprototab[i].value == proto) {
+                        printf("%s ", nfprototab[i].name);
+			return;
+		}
+	}
+}
+
+/*
+ * This table maps icmp type defines to their text name
+ */
+static struct nv_pair icmptypetab[] = {
+        {ICMP_ECHOREPLY, "echo-reply"},
+        {ICMP_DEST_UNREACH, "destination-unreachable"},
+        {ICMP_SOURCE_QUENCH, "source-quench"},
+        {ICMP_REDIRECT, "redirect"},
+        {ICMP_ECHO, "echo"},
+        {ICMP_TIME_EXCEEDED, "time-exceeded"},
+        {ICMP_PARAMETERPROB, "parameter-problem"},
+        {ICMP_TIMESTAMP, "timestamp-request"},
+        {ICMP_TIMESTAMPREPLY, "timestamp-reply"},
+        {ICMP_INFO_REQUEST, "info-request"},
+        {ICMP_INFO_REPLY, "info-reply"},
+        {ICMP_ADDRESS, "address-mask-request"},
+        {ICMP_ADDRESSREPLY, "address-mask-reply"},
+};
+#define ICMPTYPE_NAMES (sizeof(icmptypetab)/sizeof(icmptypetab[0]))
+
+static void print_icmptype(char *val)
+{
+	int icmptype, i;
+
+	errno = 0;
+	icmptype = strtoul(val, NULL, 10);
+	if (errno) {
+		printf("conversion error(%s) ", val);
+		return;
+	}
+
+        for (i = 0; i < ICMPTYPE_NAMES; i++) {
+                if (icmptypetab[i].value == icmptype) {
+                        printf("%s ", icmptypetab[i].name);
+			return;
+		}
 	}
 }
 
@@ -859,10 +990,28 @@ static void print_signals(char *val)
 	errno = 0;
 	i = strtoul(val, NULL, 10);
 	if (errno) {
-		printf("conversion error(%s)", val);
+		printf("conversion error(%s) ", val);
 		return;
 	}
 	printf("%s ", strsignal(i));
+}
+
+static void print_protocol(char *val)
+{
+	int i;
+	struct protoent *p;
+
+	errno = 0;
+	i = strtoul(val, NULL, 10);
+	if (errno) {
+		printf("conversion error(%s) ", val);
+		return;
+	}
+	p = getprotobynumber(i);
+	if (p)
+		printf("%s ", p->p_name);
+	else
+		printf("unknown protocol ");
 }
 
 static const char key_sep[2] = { AUDIT_KEY_SEPARATOR, 0 };
@@ -904,7 +1053,7 @@ static void print_list(char *val)
 	errno = 0;
 	i = strtoul(val, NULL, 10);
 	if (errno) {
-		printf("conversion error(%s)", val);
+		printf("conversion error(%s) ", val);
 		return;
 	}
 	printf("%s ", audit_flag_to_name(i));
@@ -927,10 +1076,12 @@ static void interpret(char *name, char *val, int comma, int rtype)
 
 
 	/* Do some fixups */
-	if (rtype == AUDIT_EXECVE && name[0] == 'a')
+	if (rtype == AUDIT_EXECVE && name[0] == 'a' && strcmp(name, "argc"))
 		type = T_ESCAPED;
 	else if (rtype == AUDIT_AVC && strcmp(name, "saddr") == 0)
 		type = -1;
+	else if (rtype == AUDIT_NETFILTER_PKT && strcmp(name, "saddr") == 0)
+		type = T_ADDR;
 	else if (strcmp(name, "acct") == 0) {
 		// Remove trailing punctuation
 		int len = strlen(val);
@@ -974,6 +1125,9 @@ static void interpret(char *name, char *val, int comma, int rtype)
 		case T_SOCKADDR:
 			print_sockaddr(val);
 			break;
+		case T_ADDR:
+			print_addr(val);
+			break;
 		case T_FLAGS:
 			print_flags(val);
 			break;
@@ -997,6 +1151,18 @@ static void interpret(char *name, char *val, int comma, int rtype)
 			break;
 		case T_SESSION:
 			print_session(val);
+			break;
+		case T_CAP_BITMAP:
+			print_cap_bitmap(val);
+			break;
+		case T_NFPROTO:
+			print_nfproto(val);
+			break;
+		case T_ICMPTYPE:
+			print_icmptype(val);
+			break;
+		case T_PROTOCOL:
+			print_protocol(val);
 			break;
 		default:
 			printf("%s%c", val, comma ? ',' : ' ');

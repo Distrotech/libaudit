@@ -281,7 +281,8 @@ static int get_record(llist **l)
 			}
 		} else {
 			free(buff);
-			if ((ferror(log_fd) && errno == EINTR)||feof(log_fd)) {
+			if ((ferror_unlocked(log_fd) &&
+			     errno == EINTR) || feof_unlocked(log_fd)) {
 				terminate_all_events(&lo);
 				*l = get_ready_event(&lo);
 				if (*l)

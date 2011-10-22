@@ -1,6 +1,6 @@
 /*
  * aureport.c - main file for aureport utility 
- * Copyright 2005-08,2010 Red Hat Inc., Durham, North Carolina.
+ * Copyright 2005-08, 2010,11 Red Hat Inc., Durham, North Carolina.
  * All Rights Reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -296,7 +296,7 @@ static int get_record(llist **l)
 			}
 		} else {
 			free(buff);
-			if (feof(log_fd)) {
+			if (feof_unlocked(log_fd)) {
 				terminate_all_events(&lo);
 				*l = get_ready_event(&lo);
 				if (*l)
