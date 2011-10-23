@@ -20,6 +20,7 @@
 - Update auparse to handle virt events
 - Make audisp-remote robust
 - Add 2 error returns to python bindings
+- Update the man pages a little
 
 1.7.18
 - Update time examples in ausearch/report man pages
