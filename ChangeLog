@@ -18,6 +18,7 @@
 - Report server issues to remote client
 - Update ausearch parsing
 - Update auparse to handle virt events
+- Make audisp-remote robust
 
 1.7.18
 - Update time examples in ausearch/report man pages
