@@ -1,4 +1,4 @@
-1.7.19
+1.8
 - Performance improvements for ausearch/report
 - Fix debug output resolving numeric address
 - Fix spelling error in audit.rules (#667845)
