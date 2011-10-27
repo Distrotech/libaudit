@@ -1120,9 +1120,6 @@ int audit_rule_fieldpair_data(struct audit_rule_data **rulep, const char *pair,
 				|| flags == AUDIT_FILTER_ENTRY))
 				return -17;
 			
-			if (flags == AUDIT_FILTER_EXCLUDE)
-				return -18;
-
 			if (!isdigit((char)*(v)))
 				return -21;
 
