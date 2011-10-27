@@ -76,6 +76,10 @@
 #include "typetabs.h"
 #include "icmptypetabs.h"
 
+#ifndef CAP_LAST_CAP
+#define CAP_LAST_CAP 30
+#endif
+
 typedef enum { AVC_UNSET, AVC_DENIED, AVC_GRANTED } avc_t;
 typedef enum { S_UNSET=-1, S_FAILED, S_SUCCESS } success_t;
 
